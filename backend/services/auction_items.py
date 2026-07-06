@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -376,10 +376,23 @@ def list_auction_items(
     asset_type: str = "ALL",
     keyword: str = "",
     linked: str = "ALL",
+    region: str = "",
+    usage: str = "",
+    agency: str = "",
+    price_min: int | None = None,
+    price_max: int | None = None,
+    closing_within_days: int | None = None,
+    min_discount_rate: float | None = None,
+    has_notice: str = "ALL",
+    has_detail: str = "ALL",
+    sort: str = "closing_soon",
     limit: int = 50,
     offset: int = 0,
 ) -> list[AuctionItem]:
-    statement = select(AuctionItem).options(joinedload(AuctionItem.case_links))
+    statement = select(AuctionItem).options(
+        joinedload(AuctionItem.case_links),
+        joinedload(AuctionItem.notice_links).joinedload(AuctionNoticeItemLink.notice),
+    )
     if status != "ALL":
         statement = statement.where(AuctionItem.status == status)
     if asset_type != "ALL":
@@ -387,18 +400,67 @@ def list_auction_items(
     if keyword:
         pattern = f"%{keyword}%"
         statement = statement.where(or_(AuctionItem.item_name.like(pattern), AuctionItem.address.like(pattern), AuctionItem.cltr_mng_no.like(pattern)))
+    if region:
+        statement = statement.where(AuctionItem.address.like(f"%{region}%"))
+    if usage:
+        statement = statement.where(or_(AuctionItem.usage.like(f"%{usage}%"), AuctionItem.land_category.like(f"%{usage}%")))
+    if agency:
+        statement = statement.where(AuctionItem.agency_name.like(f"%{agency}%"))
+    if price_min is not None:
+        statement = statement.where(AuctionItem.minimum_bid_price >= price_min)
+    if price_max is not None:
+        statement = statement.where(AuctionItem.minimum_bid_price <= price_max)
+    if closing_within_days is not None:
+        today = date.today()
+        end_date = today + timedelta(days=closing_within_days)
+        statement = statement.where(AuctionItem.bid_end_at >= today.isoformat(), AuctionItem.bid_end_at <= end_date.isoformat())
     if linked == "linked":
         statement = statement.where(AuctionItem.case_links.any())
     if linked == "unlinked":
         statement = statement.where(~AuctionItem.case_links.any())
+    if has_notice == "yes":
+        statement = statement.where(AuctionItem.notice_links.any())
+    if has_notice == "no":
+        statement = statement.where(~AuctionItem.notice_links.any())
+    if has_detail == "yes":
+        statement = statement.where(or_(AuctionItem.item_description != "", AuctionItem.attachment_summary != ""))
+    if has_detail == "no":
+        statement = statement.where(AuctionItem.item_description == "", AuctionItem.attachment_summary == "")
+    if min_discount_rate is not None:
+        discount_expr = (1 - (AuctionItem.minimum_bid_price * 1.0 / func.nullif(AuctionItem.appraisal_price, 0))) * 100
+        statement = statement.where(AuctionItem.appraisal_price > 0, discount_expr >= min_discount_rate)
+    orderings = {
+        "newest": (AuctionItem.created_at.desc(), AuctionItem.id.desc()),
+        "discount_desc": (AuctionItem.appraisal_price.desc(), AuctionItem.minimum_bid_price.asc()),
+        "price_asc": (AuctionItem.minimum_bid_price.asc(), AuctionItem.id.desc()),
+        "price_desc": (AuctionItem.minimum_bid_price.desc(), AuctionItem.id.desc()),
+        "updated_desc": (AuctionItem.updated_at.desc(), AuctionItem.id.desc()),
+    }
+    ordering = orderings.get(sort, (AuctionItem.bid_end_at.asc(), AuctionItem.id.desc()))
     return list(
         session.scalars(
-            statement.order_by(AuctionItem.bid_end_at.asc(), AuctionItem.id.desc()).limit(limit).offset(offset)
+            statement.order_by(*ordering).limit(limit).offset(offset)
         ).unique()
     )
 
 
-def count_auction_items(session: Session, *, status: str = "ALL", asset_type: str = "ALL", keyword: str = "", linked: str = "ALL") -> int:
+def count_auction_items(
+    session: Session,
+    *,
+    status: str = "ALL",
+    asset_type: str = "ALL",
+    keyword: str = "",
+    linked: str = "ALL",
+    region: str = "",
+    usage: str = "",
+    agency: str = "",
+    price_min: int | None = None,
+    price_max: int | None = None,
+    closing_within_days: int | None = None,
+    min_discount_rate: float | None = None,
+    has_notice: str = "ALL",
+    has_detail: str = "ALL",
+) -> int:
     statement = select(func.count(AuctionItem.id))
     if status != "ALL":
         statement = statement.where(AuctionItem.status == status)
@@ -407,10 +469,35 @@ def count_auction_items(session: Session, *, status: str = "ALL", asset_type: st
     if keyword:
         pattern = f"%{keyword}%"
         statement = statement.where(or_(AuctionItem.item_name.like(pattern), AuctionItem.address.like(pattern), AuctionItem.cltr_mng_no.like(pattern)))
+    if region:
+        statement = statement.where(AuctionItem.address.like(f"%{region}%"))
+    if usage:
+        statement = statement.where(or_(AuctionItem.usage.like(f"%{usage}%"), AuctionItem.land_category.like(f"%{usage}%")))
+    if agency:
+        statement = statement.where(AuctionItem.agency_name.like(f"%{agency}%"))
+    if price_min is not None:
+        statement = statement.where(AuctionItem.minimum_bid_price >= price_min)
+    if price_max is not None:
+        statement = statement.where(AuctionItem.minimum_bid_price <= price_max)
+    if closing_within_days is not None:
+        today = date.today()
+        end_date = today + timedelta(days=closing_within_days)
+        statement = statement.where(AuctionItem.bid_end_at >= today.isoformat(), AuctionItem.bid_end_at <= end_date.isoformat())
     if linked == "linked":
         statement = statement.where(AuctionItem.case_links.any())
     if linked == "unlinked":
         statement = statement.where(~AuctionItem.case_links.any())
+    if has_notice == "yes":
+        statement = statement.where(AuctionItem.notice_links.any())
+    if has_notice == "no":
+        statement = statement.where(~AuctionItem.notice_links.any())
+    if has_detail == "yes":
+        statement = statement.where(or_(AuctionItem.item_description != "", AuctionItem.attachment_summary != ""))
+    if has_detail == "no":
+        statement = statement.where(AuctionItem.item_description == "", AuctionItem.attachment_summary == "")
+    if min_discount_rate is not None:
+        discount_expr = (1 - (AuctionItem.minimum_bid_price * 1.0 / func.nullif(AuctionItem.appraisal_price, 0))) * 100
+        statement = statement.where(AuctionItem.appraisal_price > 0, discount_expr >= min_discount_rate)
     return session.scalar(statement) or 0
 
 
@@ -421,6 +508,7 @@ def get_auction_item(session: Session, item_id: int) -> AuctionItem | None:
             joinedload(AuctionItem.snapshots),
             joinedload(AuctionItem.results),
             joinedload(AuctionItem.case_links).joinedload(CaseAuctionLink.case_event),
+            joinedload(AuctionItem.notice_links).joinedload(AuctionNoticeItemLink.notice),
         )
         .where(AuctionItem.id == item_id)
     )
@@ -556,6 +644,22 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
     discount = calculate_discount_rate(item.appraisal_price, item.minimum_bid_price)
     minimum_rate = calculate_minimum_price_rate(item.appraisal_price, item.minimum_bid_price)
     score, reasons = calculate_liquidation_score(item)
+    notices = [
+        {
+            "id": link.notice.id,
+            "notice_title": link.notice.notice_title,
+            "notice_status": link.notice.notice_status,
+            "notice_type": link.notice.notice_type,
+            "notice_date": link.notice.notice_date,
+            "bid_start_at": link.notice.bid_start_at,
+            "bid_end_at": link.notice.bid_end_at,
+            "agency_name": link.notice.agency_name,
+            "department_name": link.notice.department_name,
+            "detail_url": link.notice.detail_url,
+        }
+        for link in item.notice_links
+        if link.notice
+    ]
     return {
         "id": item.id,
         "source": item.source,
@@ -595,4 +699,8 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         "liquidation_reasons": reasons,
         "d_day": calculate_d_day(item.bid_end_at),
         "link_count": len(item.case_links),
+        "notice_count": len(notices),
+        "notices": notices,
+        "has_detail": bool(item.item_description or item.attachment_summary or item.cautions),
+        "external_url": notices[0]["detail_url"] if notices and notices[0]["detail_url"] else "",
     }

@@ -97,6 +97,10 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    auction_preferences: Mapped[list["UserAuctionPreference"]] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class UserEventAction(Base):
@@ -323,6 +327,31 @@ class AuctionItem(Base):
     results: Mapped[list["AuctionResult"]] = relationship(back_populates="auction_item", cascade="all, delete-orphan")
     case_links: Mapped[list["CaseAuctionLink"]] = relationship(back_populates="auction_item", cascade="all, delete-orphan")
     notice_links: Mapped[list["AuctionNoticeItemLink"]] = relationship(back_populates="auction_item", cascade="all, delete-orphan")
+    user_preferences: Mapped[list["UserAuctionPreference"]] = relationship(
+        back_populates="auction_item",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserAuctionPreference(Base):
+    __tablename__ = "user_auction_preferences"
+    __table_args__ = (
+        UniqueConstraint("user_id", "auction_item_id", name="uq_user_auction_preferences_user_item"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    auction_item_id: Mapped[int] = mapped_column(ForeignKey("auction_items.id"), nullable=False, index=True)
+    is_favorite: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_passed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_watching: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    tags: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    user: Mapped[User] = relationship(back_populates="auction_preferences")
+    auction_item: Mapped[AuctionItem] = relationship(back_populates="user_preferences")
 
 
 class AuctionItemSnapshot(Base):

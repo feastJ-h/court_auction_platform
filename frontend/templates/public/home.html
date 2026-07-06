@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="온비드 공매와 회생·파산 공고를 공개 탐색하고 로그인 후 관심, 패스, 메모, AI 분석을 관리합니다.">
+  <meta property="og:title" content="Court Auction Platform">
+  <meta property="og:description" content="온비드 공매와 회생·파산 공고 공개 탐색">
+  <title>Court Auction Platform</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-950">
+  <main>
+    <section class="border-b border-zinc-200 bg-white">
+      <div class="mx-auto grid max-w-7xl gap-6 px-4 py-10 md:grid-cols-[1fr_360px] md:items-center">
+        <div>
+          <p class="text-sm font-black text-emerald-700">Court Auction Platform</p>
+          <h1 class="mt-2 text-3xl font-black tracking-normal md:text-5xl">온비드 공매와 회생·파산 공고</h1>
+          <p class="mt-4 max-w-2xl text-base leading-7 text-zinc-600">공개 정보는 바로 탐색하고, 로그인 후 관심·패스·감시·메모와 회생·파산 AI 분석을 함께 관리합니다.</p>
+          <div class="mt-6 flex flex-wrap gap-2 text-sm font-bold">
+            <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid">온비드 보기</a>
+            <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/cases">회생·파산 보기</a>
+            {% if current_user %}
+              <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/user">내 분석 화면</a>
+            {% else %}
+              <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/login?next=/user">로그인</a>
+            {% endif %}
+          </div>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-zinc-50 p-5">
+          <div class="grid gap-3">
+            <a class="rounded-md border border-zinc-200 bg-white p-4" href="/onbid?closing_within_days=7">
+              <p class="text-sm font-black text-zinc-500">마감 임박</p>
+              <p class="mt-1 text-xl font-black">이번 주 온비드 공매</p>
+            </a>
+            <a class="rounded-md border border-zinc-200 bg-white p-4" href="/cases">
+              <p class="text-sm font-black text-zinc-500">공개 공고</p>
+              <p class="mt-1 text-xl font-black">회생·파산 기본 정보</p>
+            </a>
+            <a class="rounded-md border border-zinc-200 bg-white p-4" href="/disclaimer">
+              <p class="text-sm font-black text-zinc-500">고지</p>
+              <p class="mt-1 text-xl font-black">원문 확인과 투자 책임</p>
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+    {% include "shared/ad_slot.html" %}
+  </main>
+</body>
+</html>

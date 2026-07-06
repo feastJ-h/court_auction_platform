@@ -1,5 +1,68 @@
 # Migration Ledger
 
+## v003 - 온비드 사용자 개인화
+
+변경일: 2026-07-06
+
+### 변경 목적
+
+로그인 사용자가 온비드 공매 물건에 관심, 패스, 감시, 메모, 태그를 저장할 수 있도록 비파괴 신규 테이블을 추가했다.
+
+### 변경 테이블
+
+#### `user_auction_preferences`
+
+신규 테이블:
+
+- `id`
+- `user_id`
+- `auction_item_id`
+- `is_favorite BOOLEAN NOT NULL DEFAULT 0`
+- `is_passed BOOLEAN NOT NULL DEFAULT 0`
+- `is_watching BOOLEAN NOT NULL DEFAULT 0`
+- `note TEXT NOT NULL DEFAULT ''`
+- `tags TEXT NOT NULL DEFAULT ''`
+- `created_at`
+- `updated_at`
+
+unique 제약:
+
+```text
+user_id + auction_item_id
+```
+
+### 적용 방식
+
+- `Base.metadata.create_all(engine)`로 신규 테이블을 생성한다.
+- 기존 테이블/컬럼/데이터 삭제는 수행하지 않는다.
+- 기존 온비드 중복 기준 `source + cltr_mng_no + pbct_cdtn_no`는 변경하지 않는다.
+
+### 기존 데이터 영향
+
+- 기존 온비드 물건, 공고, 회생/파산 사건 데이터에는 영향을 주지 않는다.
+- preference 행은 로그인 사용자가 온비드 preference POST/API를 호출할 때 생성된다.
+
+### 수동 복구/롤백
+
+코드 롤백만으로 기존 조회 기능은 유지된다. 신규 preference 데이터를 제거해야 하는 운영 상황은 별도 백업 복구 또는 명시적 데이터 정리 절차로 처리한다.
+
+운영 전 권장:
+
+```powershell
+.\backup_database.ps1
+```
+
+### 검증
+
+v003에서 다음 검증을 수행했다.
+
+- `py_compile` 주요 backend/test 파일
+- `tests/public_access_auth_boundary_test.py`
+- `tests/onbid_module_test.py`
+- `tests/page_response_smoke_test.py`
+- `tests/router_boundary_test.py`
+- `tests/isolated_operations_test.py`
+
 ## v002 - 온비드 공고 저장과 관찰성
 
 변경일: 2026-07-06

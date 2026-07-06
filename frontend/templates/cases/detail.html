@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ case.title }} | 회생·파산 공고</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-950">
+  <main class="mx-auto max-w-5xl px-4 py-6">
+    <header class="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="font-mono text-sm font-black text-emerald-700">{{ case.case_number }}</p>
+        <h1 class="mt-1 text-2xl font-black">{{ case.title }}</h1>
+        <p class="mt-2 text-sm text-zinc-600">{{ case.address }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/cases">목록</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/onbid">온비드</a>
+        {% if current_user %}
+          <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/user">AI 분석</a>
+        {% else %}
+          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/login?next=/cases/{{ case.id }}">로그인</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-4">
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">상태</p><p class="mt-2 text-xl font-black">{{ case.status }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">분류</p><p class="mt-2 text-xl font-black">{{ case.main_category }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">공고일</p><p class="mt-2 text-xl font-black">{{ case.notice_date }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">마감</p><p class="mt-2 text-xl font-black">{{ case.d_day.label }}</p></div>
+    </section>
+
+    <section class="rounded-md border border-zinc-200 bg-white p-5">
+      <h2 class="text-lg font-black">기본 공고 정보</h2>
+      <dl class="mt-4 grid gap-3 text-sm md:grid-cols-2">
+        <div><dt class="font-bold text-zinc-500">세부 분류</dt><dd class="mt-1 font-black">{{ case.sub_category }}</dd></div>
+        <div><dt class="font-bold text-zinc-500">처리 상태</dt><dd class="mt-1 font-black">{{ case.parse_status }}</dd></div>
+        <div><dt class="font-bold text-zinc-500">공고 만료일</dt><dd class="mt-1 font-black">{{ case.expire_date }}</dd></div>
+        <div><dt class="font-bold text-zinc-500">첨부명</dt><dd class="mt-1 font-black">{{ case.attachment_name or '-' }}</dd></div>
+      </dl>
+      <p class="mt-4 rounded-md bg-zinc-50 p-4 text-sm leading-7 text-zinc-700">{{ case.description }}</p>
+      <div class="mt-4 flex flex-wrap gap-2">
+        {% if case.external_url %}
+          <a class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" href="{{ case.external_url }}" target="_blank" rel="noopener noreferrer">외부 원문 열기</a>
+        {% endif %}
+        {% if current_user %}
+          <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-800" href="/user">로그인 분석 화면에서 보기</a>
+        {% else %}
+          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="/login?next=/cases/{{ case.id }}">AI 분석은 로그인 후 확인</a>
+        {% endif %}
+      </div>
+    </section>
+    {% include "shared/ad_slot.html" %}
+  </main>
+</body>
+</html>

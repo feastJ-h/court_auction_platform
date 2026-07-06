@@ -7,7 +7,7 @@ from math import ceil
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -369,8 +369,61 @@ def on_startup() -> None:
 
 
 @app.get("/")
-def root() -> RedirectResponse:
-    return RedirectResponse(url="/user")
+def root(request: Request):
+    with session_scope() as session:
+        current_user = require_user(request, session)
+        return templates.TemplateResponse(
+            request,
+            "public/home.html",
+            {
+                "current_user": current_user,
+                "settings": get_settings(),
+            },
+        )
+
+
+@app.get("/about")
+def about_page(request: Request):
+    with session_scope() as session:
+        return templates.TemplateResponse(
+            request,
+            "public/about.html",
+            {"current_user": require_user(request, session)},
+        )
+
+
+@app.get("/disclaimer")
+def disclaimer_page(request: Request):
+    with session_scope() as session:
+        return templates.TemplateResponse(
+            request,
+            "public/disclaimer.html",
+            {"current_user": require_user(request, session)},
+        )
+
+
+@app.get("/privacy-draft")
+def privacy_draft_page(request: Request):
+    with session_scope() as session:
+        return templates.TemplateResponse(
+            request,
+            "public/privacy_draft.html",
+            {"current_user": require_user(request, session)},
+        )
+
+
+@app.get("/robots.txt")
+def robots_txt() -> Response:
+    body = "User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n"
+    return Response(content=body, media_type="text/plain")
+
+
+@app.get("/sitemap.xml")
+def sitemap_xml() -> Response:
+    paths = ["/", "/onbid", "/cases", "/about", "/disclaimer", "/privacy-draft"]
+    urlset = "".join(f"<url><loc>{path}</loc></url>" for path in paths)
+    body = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urlset}</urlset>'
+    return Response(content=body, media_type="application/xml")
 
 
 @app.get("/login")

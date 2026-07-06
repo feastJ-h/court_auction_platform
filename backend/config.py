@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     onbid_notice_cltr_operation: str = Field(default="", alias="ONBID_NOTICE_CLTR_OPERATION")
     onbid_bid_target_base_url: str = Field(default="", alias="ONBID_BID_TARGET_BASE_URL")
     onbid_bid_target_operation: str = Field(default="", alias="ONBID_BID_TARGET_OPERATION")
+    adsense_enabled: bool = Field(default=False, alias="ADSENSE_ENABLED")
+    adsense_client_id: str = Field(default="", alias="ADSENSE_CLIENT_ID")
+    adsense_footer_slot_id: str = Field(default="", alias="ADSENSE_FOOTER_SLOT_ID")
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),

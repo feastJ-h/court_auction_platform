@@ -1,0 +1,9 @@
+{% if settings and settings.adsense_enabled and settings.adsense_client_id and settings.adsense_footer_slot_id %}
+  <aside class="mx-auto my-6 max-w-7xl px-4" aria-label="광고">
+    <ins class="adsbygoogle block"
+         data-ad-client="{{ settings.adsense_client_id }}"
+         data-ad-slot="{{ settings.adsense_footer_slot_id }}"
+         data-ad-format="auto"
+         data-full-width-responsive="true"></ins>
+  </aside>
+{% endif %}

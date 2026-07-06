@@ -15,21 +15,28 @@
         <p class="mt-2 text-sm text-zinc-600">부동산과 동산 공매 물건 정보를 모아보고, 입찰 일정과 물건 세부 정보를 확인합니다.</p>
       </div>
       <div class="flex flex-wrap gap-2 text-sm font-bold">
-        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/auctions">온비드 공매</a>
-        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/user">회생·파산</a>
-        {% if current_user.role == 'admin' %}
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid">온비드 공매</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/cases">회생·파산</a>
+        {% if current_user %}
+          <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/my/onbid/favorites">내 온비드</a>
+        {% else %}
+          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/login?next=/onbid">로그인</a>
+        {% endif %}
+        {% if current_user and current_user.role == 'admin' %}
           <a class="rounded-md border border-indigo-300 bg-indigo-50 px-4 py-2 text-indigo-800" href="/admin/collection">수집 관리</a>
         {% endif %}
       </div>
     </header>
 
-    <form class="mb-4 grid gap-2 rounded-md border border-zinc-200 bg-white p-4 md:grid-cols-[1fr_180px_150px_auto]">
-      <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="keyword" value="{{ filters.keyword }}" placeholder="물건명, 주소, 물건번호 검색">
+    <form class="mb-4 grid gap-2 rounded-md border border-zinc-200 bg-white p-4 md:grid-cols-[1fr_150px_130px_130px_130px_auto]" action="{{ base_path }}">
+      <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="q" value="{{ filters.keyword }}" placeholder="물건명, 주소, 물건번호 검색">
       <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="asset_type">
         <option value="ALL" {% if filters.asset_type == 'ALL' %}selected{% endif %}>재산 전체</option>
         <option value="부동산" {% if filters.asset_type == '부동산' %}selected{% endif %}>부동산</option>
         <option value="동산" {% if filters.asset_type == '동산' %}selected{% endif %}>동산</option>
       </select>
+      <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="region" value="{{ filters.region }}" placeholder="지역">
+      <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="price_max" value="{{ filters.price_max }}" placeholder="최대가">
       <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="status">
         <option value="ALL" {% if filters.status == 'ALL' %}selected{% endif %}>상태 전체</option>
         {% for status in ['입찰예정', '입찰중', '유찰', '낙찰', '취소'] %}
@@ -37,9 +44,18 @@
         {% endfor %}
       </select>
       <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">검색</button>
+      <div class="md:col-span-6 flex flex-wrap gap-2 pt-2 text-xs font-bold">
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?closing_within_days=7&sort=closing_soon">7일 내 마감</a>
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?sort=newest">신규 등록</a>
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?min_discount_rate=30&sort=discount_desc">저감률 30%+</a>
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?asset_type=부동산">부동산</a>
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?asset_type=동산">동산</a>
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?has_notice=yes">공고 연결 있음</a>
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-1.5" href="{{ base_path }}?has_detail=yes">상세정보 있음</a>
+      </div>
     </form>
 
-    {% if current_user.role == 'admin' %}
+    {% if current_user and current_user.role == 'admin' %}
       <section class="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
@@ -76,9 +92,21 @@
               <tr class="hover:bg-zinc-50">
                 <td class="px-4 py-3"><span class="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-black">{{ item.status }}</span></td>
                 <td class="px-4 py-3">
-                  <a class="font-black text-zinc-950 hover:text-emerald-700" href="/auctions/{{ item.id }}">{{ item.item_name }}</a>
+                  <a class="font-black text-zinc-950 hover:text-emerald-700" href="{{ base_path }}/{{ item.id }}">{{ item.item_name }}</a>
                   <p class="mt-1 font-mono text-xs text-zinc-500">{{ item.cltr_mng_no }}</p>
                   <p class="mt-1 font-mono text-xs text-zinc-500">PBCT {{ item.pbct_no or item.pbct_cdtn_no }}{% if item.pbct_nsq %} / round {{ item.pbct_nsq }}{% endif %}</p>
+                  <div class="mt-2 flex flex-wrap gap-1 text-xs font-bold">
+                    {% if item.notice_count %}<span class="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">공고 {{ item.notice_count }}</span>{% endif %}
+                    {% if item.has_detail %}<span class="rounded-full bg-blue-100 px-2 py-1 text-blue-800">상세</span>{% endif %}
+                    {% if item.preference.is_favorite %}<span class="rounded-full bg-amber-100 px-2 py-1 text-amber-800">관심</span>{% endif %}
+                    {% if item.preference.is_passed %}<span class="rounded-full bg-zinc-200 px-2 py-1 text-zinc-700">패스</span>{% endif %}
+                  </div>
+                  <form class="mt-2 inline-block" action="/onbid/{{ item.id }}/preference" method="post">
+                    <input type="hidden" name="action" value="favorite">
+                    <input type="hidden" name="enabled" value="true">
+                    <input type="hidden" name="next_url" value="{{ base_path }}?page={{ pagination.page }}">
+                    <button class="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-800" type="submit">관심</button>
+                  </form>
                 </td>
                 <td class="max-w-xs px-4 py-3 text-zinc-600">{{ item.address }}</td>
                 <td class="px-4 py-3 font-bold">{{ "{:,}".format(item.appraisal_price) }}</td>
@@ -97,15 +125,16 @@
 
     <nav class="mt-4 flex flex-wrap justify-center gap-2 text-sm font-bold">
       {% if pagination.has_prev %}
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/auctions?page={{ pagination.prev_page }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&keyword={{ filters.keyword }}">이전</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="{{ base_path }}?page={{ pagination.prev_page }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&q={{ filters.keyword }}&region={{ filters.region }}&price_max={{ filters.price_max }}">이전</a>
       {% endif %}
       {% for p in pagination.pages %}
-        <a class="rounded-md px-3 py-2 {% if p == pagination.page %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white{% endif %}" href="/auctions?page={{ p }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&keyword={{ filters.keyword }}">{{ p }}</a>
+        <a class="rounded-md px-3 py-2 {% if p == pagination.page %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white{% endif %}" href="{{ base_path }}?page={{ p }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&q={{ filters.keyword }}&region={{ filters.region }}&price_max={{ filters.price_max }}">{{ p }}</a>
       {% endfor %}
       {% if pagination.has_next %}
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/auctions?page={{ pagination.next_page }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&keyword={{ filters.keyword }}">다음</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="{{ base_path }}?page={{ pagination.next_page }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&q={{ filters.keyword }}&region={{ filters.region }}&price_max={{ filters.price_max }}">다음</a>
       {% endif %}
     </nav>
+    {% include "shared/ad_slot.html" %}
   </main>
 
   <script>

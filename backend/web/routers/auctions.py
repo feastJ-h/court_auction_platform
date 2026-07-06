@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from math import ceil
-from fastapi import Body, FastAPI, HTTPException, Query, Request
+from fastapi import Body, FastAPI, Form, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from backend.database.crud import get_event_with_details
 from backend.database.session import session_scope
+from backend.config import get_settings
 from backend.services.auction_items import (
     count_auction_items,
     create_case_auction_link,
@@ -16,6 +18,13 @@ from backend.services.auction_items import (
     serialize_auction_item,
 )
 from backend.services.audit_logs import create_audit_log
+from backend.services.user_auction_preferences import (
+    get_preference,
+    get_preference_map,
+    list_preference_items,
+    serialize_preference,
+    update_preference,
+)
 from backend.web.dependencies import LoginRedirect, RequireAdmin, RequireUser, admin_login_required
 from backend.workers.onbid_sync import run_onbid_sync
 
@@ -28,26 +37,47 @@ def register_auction_routes(
     require_admin: RequireAdmin,
     login_redirect: LoginRedirect,
 ) -> None:
-    @app.get("/auctions")
-    def auction_list_page(
+    def _read_price(value: int | None) -> int | None:
+        return value if value and value > 0 else None
+
+    def _render_auction_list(
         request: Request,
-        page: int = Query(1, ge=1),
-        status: str = Query("ALL"),
-        asset_type: str = Query("ALL"),
-        keyword: str = Query(""),
-        linked: str = Query("ALL"),
+        *,
+        page: int,
+        status: str,
+        asset_type: str,
+        keyword: str,
+        linked: str,
+        region: str,
+        usage: str,
+        agency: str,
+        price_min: int | None,
+        price_max: int | None,
+        closing_within_days: int | None,
+        min_discount_rate: float | None,
+        has_notice: str,
+        has_detail: str,
+        sort: str,
+        base_path: str,
     ):
         per_page = 20
         with session_scope() as session:
             current_user = require_user(request, session)
-            if current_user is None:
-                return login_redirect("/auctions")
             total_count = count_auction_items(
                 session,
                 status=status,
                 asset_type=asset_type,
                 keyword=keyword,
                 linked=linked,
+                region=region,
+                usage=usage,
+                agency=agency,
+                price_min=_read_price(price_min),
+                price_max=_read_price(price_max),
+                closing_within_days=closing_within_days,
+                min_discount_rate=min_discount_rate,
+                has_notice=has_notice,
+                has_detail=has_detail,
             )
             total_pages = max(1, ceil(total_count / per_page))
             current_page = min(page, total_pages)
@@ -57,20 +87,50 @@ def register_auction_routes(
                 asset_type=asset_type,
                 keyword=keyword,
                 linked=linked,
+                region=region,
+                usage=usage,
+                agency=agency,
+                price_min=_read_price(price_min),
+                price_max=_read_price(price_max),
+                closing_within_days=closing_within_days,
+                min_discount_rate=min_discount_rate,
+                has_notice=has_notice,
+                has_detail=has_detail,
+                sort=sort,
                 limit=per_page,
                 offset=(current_page - 1) * per_page,
             )
+            item_views = [serialize_auction_item(item) for item in items]
+            preferences = (
+                get_preference_map(session, current_user.id, [item.id for item in items])
+                if current_user
+                else {}
+            )
+            for view in item_views:
+                view["preference"] = serialize_preference(preferences.get(view["id"]))
             return templates.TemplateResponse(
                 request,
                 "auctions/index.html",
                 {
                     "current_user": current_user,
-                    "items": [serialize_auction_item(item) for item in items],
+                    "settings": get_settings(),
+                    "items": item_views,
+                    "base_path": base_path,
                     "filters": {
                         "status": status,
                         "asset_type": asset_type,
                         "keyword": keyword,
                         "linked": linked,
+                        "region": region,
+                        "usage": usage,
+                        "agency": agency,
+                        "price_min": price_min or "",
+                        "price_max": price_max or "",
+                        "closing_within_days": closing_within_days or "",
+                        "min_discount_rate": min_discount_rate or "",
+                        "has_notice": has_notice,
+                        "has_detail": has_detail,
+                        "sort": sort,
                     },
                     "pagination": {
                         "page": current_page,
@@ -84,24 +144,235 @@ def register_auction_routes(
                 },
             )
 
+    @app.get("/auctions")
+    def auction_list_page(
+        request: Request,
+        page: int = Query(1, ge=1),
+        status: str = Query("ALL"),
+        asset_type: str = Query("ALL"),
+        keyword: str = Query(""),
+        q: str = Query(""),
+        linked: str = Query("ALL"),
+        region: str = Query(""),
+        usage: str = Query(""),
+        agency: str = Query(""),
+        price_min: int | None = Query(None, ge=0),
+        price_max: int | None = Query(None, ge=0),
+        closing_within_days: int | None = Query(None, ge=0, le=365),
+        min_discount_rate: float | None = Query(None, ge=0, le=100),
+        has_notice: str = Query("ALL"),
+        has_detail: str = Query("ALL"),
+        sort: str = Query("closing_soon"),
+    ):
+        return _render_auction_list(
+            request,
+            page=page,
+            status=status,
+            asset_type=asset_type,
+            keyword=q or keyword,
+            linked=linked,
+            region=region,
+            usage=usage,
+            agency=agency,
+            price_min=price_min,
+            price_max=price_max,
+            closing_within_days=closing_within_days,
+            min_discount_rate=min_discount_rate,
+            has_notice=has_notice,
+            has_detail=has_detail,
+            sort=sort,
+            base_path="/auctions",
+        )
+
+    @app.get("/onbid")
+    def onbid_list_page(
+        request: Request,
+        page: int = Query(1, ge=1),
+        status: str = Query("ALL"),
+        asset_type: str = Query("ALL"),
+        q: str = Query(""),
+        keyword: str = Query(""),
+        linked: str = Query("ALL"),
+        region: str = Query(""),
+        usage: str = Query(""),
+        agency: str = Query(""),
+        price_min: int | None = Query(None, ge=0),
+        price_max: int | None = Query(None, ge=0),
+        closing_within_days: int | None = Query(None, ge=0, le=365),
+        min_discount_rate: float | None = Query(None, ge=0, le=100),
+        has_notice: str = Query("ALL"),
+        has_detail: str = Query("ALL"),
+        sort: str = Query("closing_soon"),
+    ):
+        return _render_auction_list(
+            request,
+            page=page,
+            status=status,
+            asset_type=asset_type,
+            keyword=q or keyword,
+            linked=linked,
+            region=region,
+            usage=usage,
+            agency=agency,
+            price_min=price_min,
+            price_max=price_max,
+            closing_within_days=closing_within_days,
+            min_discount_rate=min_discount_rate,
+            has_notice=has_notice,
+            has_detail=has_detail,
+            sort=sort,
+            base_path="/onbid",
+        )
+
     @app.get("/auctions/{auction_item_id}")
     def auction_detail_page(request: Request, auction_item_id: int):
+        return _render_auction_detail(request, auction_item_id, base_path="/auctions")
+
+    @app.get("/onbid/{auction_item_id}")
+    def onbid_detail_page(request: Request, auction_item_id: int):
+        return _render_auction_detail(request, auction_item_id, base_path="/onbid")
+
+    def _render_auction_detail(request: Request, auction_item_id: int, *, base_path: str):
         with session_scope() as session:
             current_user = require_user(request, session)
-            if current_user is None:
-                return login_redirect(f"/auctions/{auction_item_id}")
             item = get_auction_item(session, auction_item_id)
             if item is None:
                 raise HTTPException(status_code=404, detail="Auction item not found.")
+            preference = get_preference(session, current_user.id, auction_item_id) if current_user else None
             return templates.TemplateResponse(
                 request,
                 "auctions/detail.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
                     "item": item,
                     "view": serialize_auction_item(item),
+                    "preference": serialize_preference(preference),
+                    "base_path": base_path,
                 },
             )
+
+    def _redirect_after_preference(next_url: str, auction_item_id: int) -> RedirectResponse:
+        target = next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}"
+        return RedirectResponse(url=target, status_code=303)
+
+    def _save_preference(
+        request: Request,
+        auction_item_id: int,
+        *,
+        favorite: bool | None,
+        passed: bool | None,
+        watching: bool | None,
+        note: str | None,
+        tags: str | None,
+        next_url: str,
+    ):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            if current_user is None:
+                return login_redirect(next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}")
+            if get_auction_item(session, auction_item_id) is None:
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            update_preference(
+                session,
+                current_user.id,
+                auction_item_id,
+                favorite=favorite,
+                passed=passed,
+                watching=watching,
+                note=note,
+                tags=tags,
+            )
+            create_audit_log(
+                session,
+                current_user.id,
+                "USER_AUCTION_PREFERENCE_SAVED",
+                "auction_item",
+                auction_item_id,
+                "User saved ONBID preference",
+                {"favorite": favorite, "passed": passed, "watching": watching},
+            )
+        return _redirect_after_preference(next_url, auction_item_id)
+
+    @app.post("/onbid/{auction_item_id}/preference")
+    def save_onbid_preference(
+        request: Request,
+        auction_item_id: int,
+        action: str = Form("favorite"),
+        enabled: bool = Form(True),
+        note: str = Form(""),
+        tags: str = Form(""),
+        next_url: str = Form(""),
+    ):
+        return _save_preference(
+            request,
+            auction_item_id,
+            favorite=enabled if action == "favorite" else None,
+            passed=enabled if action == "passed" else None,
+            watching=enabled if action == "watching" else None,
+            note=note if action == "note" else None,
+            tags=tags if action == "note" else None,
+            next_url=next_url or f"/onbid/{auction_item_id}",
+        )
+
+    @app.post("/api/onbid/{auction_item_id}/preference")
+    def save_onbid_preference_api(request: Request, auction_item_id: int, payload: dict = Body(...)):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            if current_user is None:
+                raise HTTPException(status_code=401, detail="Login required.")
+            if get_auction_item(session, auction_item_id) is None:
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            preference = update_preference(
+                session,
+                current_user.id,
+                auction_item_id,
+                favorite=payload.get("favorite"),
+                passed=payload.get("passed"),
+                watching=payload.get("watching"),
+                note=payload.get("note") if "note" in payload else None,
+                tags=payload.get("tags") if "tags" in payload else None,
+            )
+            return {"status": "saved", "preference": serialize_preference(preference)}
+
+    def _render_my_onbid(request: Request, preference_type: str, title: str, description: str):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            if current_user is None:
+                return login_redirect("/my/onbid/favorites")
+            items = list_preference_items(session, current_user.id, preference_type)
+            preferences = get_preference_map(session, current_user.id, [item.id for item in items])
+            views = [serialize_auction_item(item) for item in items]
+            for view in views:
+                view["preference"] = serialize_preference(preferences.get(view["id"]))
+            return templates.TemplateResponse(
+                request,
+                "auctions/my_list.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "items": views,
+                    "preference_type": preference_type,
+                    "title": title,
+                    "description": description,
+                },
+            )
+
+    @app.get("/my")
+    def my_dashboard(request: Request) -> RedirectResponse:
+        return RedirectResponse(url="/my/onbid/favorites", status_code=303)
+
+    @app.get("/my/onbid/favorites")
+    def my_onbid_favorites(request: Request):
+        return _render_my_onbid(request, "favorites", "관심 온비드", "다시 검토할 온비드 공매 물건입니다.")
+
+    @app.get("/my/onbid/passed")
+    def my_onbid_passed(request: Request):
+        return _render_my_onbid(request, "passed", "패스한 온비드", "목록에서 제외한 온비드 공매 물건입니다.")
+
+    @app.get("/my/onbid/watching")
+    def my_onbid_watching(request: Request):
+        return _render_my_onbid(request, "watching", "감시 중인 온비드", "입찰 일정과 상태를 추적할 온비드 공매 물건입니다.")
 
     @app.post("/api/admin/auctions/onbid/sync")
     def sync_onbid_auctions_api(

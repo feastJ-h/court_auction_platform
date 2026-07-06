@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from collections import Counter
+from datetime import date, datetime
 from math import ceil
 
-from fastapi import FastAPI, Form, Query, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from backend.database.crud import count_user_events, list_user_events_page
+from backend.config import get_settings
+from backend.database.crud import count_user_events, get_event_with_details, list_user_events_page
 from backend.database.session import session_scope
 from backend.jobs.event_repository import list_job_events
 from backend.jobs.readiness import get_analysis_readiness
@@ -45,6 +47,103 @@ def register_case_routes(
     attach_user_note_metadata: AttachUserNotes,
     build_event_payload: BuildEventPayload,
 ) -> None:
+    def _safe_external_url(value: str) -> str:
+        text = str(value or "").strip()
+        return text if text.startswith(("http://", "https://")) else ""
+
+    def _date_d_day(value: str) -> dict:
+        text = str(value or "").strip()
+        if not text or text == "UNKNOWN":
+            return {"label": "미정", "state": "unknown"}
+        try:
+            delta = (datetime.strptime(text[:10], "%Y-%m-%d").date() - date.today()).days
+        except ValueError:
+            return {"label": "미정", "state": "unknown"}
+        if delta == 0:
+            return {"label": "D-Day", "state": "urgent"}
+        if delta < 0:
+            return {"label": f"D+{abs(delta)}", "state": "closed"}
+        return {"label": f"D-{delta}", "state": "urgent" if delta <= 7 else "normal"}
+
+    def _public_case_view(event) -> dict:
+        evidence = event.raw_document.evidence if event.raw_document else None
+        description = ""
+        if evidence and evidence.source_title:
+            description = evidence.source_title
+        elif event.title:
+            description = event.title
+        return {
+            "id": event.id,
+            "case_number": event.case_number,
+            "title": event.title,
+            "status": event.status,
+            "parse_status": event.parse_status,
+            "notice_date": event.notice_date,
+            "expire_date": event.expire_date,
+            "d_day": _date_d_day(event.expire_date),
+            "main_category": event.asset.main_category,
+            "sub_category": event.asset.sub_category,
+            "address": event.asset.address,
+            "description": description,
+            "external_url": _safe_external_url(event.url or (event.raw_document.source_url if event.raw_document else "")),
+            "attachment_name": evidence.attachment_name if evidence else "",
+            "has_login_analysis": bool(event.analyses),
+        }
+
+    @app.get("/cases")
+    def public_case_list(request: Request, page: int = Query(1, ge=1), q: str = Query(""), category: str = Query("ALL")):
+        per_page = 20
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            total_count = count_user_events(session)
+            total_pages = max(1, ceil(total_count / per_page))
+            current_page = min(page, total_pages)
+            events = list_user_events_page(session, limit=per_page, offset=(current_page - 1) * per_page)
+            views = [_public_case_view(event) for event in events]
+            if q:
+                views = [
+                    view for view in views
+                    if q in view["title"] or q in view["case_number"] or q in view["address"]
+                ]
+            if category != "ALL":
+                views = [view for view in views if view["main_category"] == category]
+            return templates.TemplateResponse(
+                request,
+                "cases/index.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "cases": views,
+                    "filters": {"q": q, "category": category},
+                    "pagination": {
+                        "page": current_page,
+                        "pages": list(range(1, total_pages + 1)),
+                        "has_prev": current_page > 1,
+                        "has_next": current_page < total_pages,
+                        "prev_page": max(1, current_page - 1),
+                        "next_page": min(total_pages, current_page + 1),
+                    },
+                    "total_count": total_count,
+                },
+            )
+
+    @app.get("/cases/{event_id}")
+    def public_case_detail(request: Request, event_id: int):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            event = get_event_with_details(session, event_id)
+            if event is None:
+                raise HTTPException(status_code=404, detail="Case not found.")
+            return templates.TemplateResponse(
+                request,
+                "cases/detail.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "case": _public_case_view(event),
+                },
+            )
+
     def prepare_user_events(session, events, user_id: int, *, include_job_events: bool) -> None:
         attach_view_metadata(events)
         attach_analysis_result_metadata(session, events)

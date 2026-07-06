@@ -1,0 +1,11 @@
+<nav class="mb-5 flex flex-wrap gap-2 text-sm font-bold" data-admin-nav="true">
+  {% for value, label, href in [
+    ('operations_readiness', '준비 상태', '/admin/operations-readiness'),
+    ('collection', '수집', '/admin/collection'),
+    ('run_history', '실행 이력', '/admin/onbid-runs'),
+    ('users', '사용자', '/admin/users'),
+    ('reviews', '검수', '/admin/reviews')
+  ] %}
+    <a class="rounded-md px-3 py-2 {% if active_subsection == value %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white text-zinc-800{% endif %}" href="{{ href }}" {% if active_subsection == value %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>

@@ -1,5 +1,66 @@
 # Migration Ledger
 
+## v005 - Public freshness, stored ONBID derived fields, and review readiness
+Change date: 2026-07-07
+
+### Purpose
+
+v005 enforces the public ONBID freshness policy, keeps stale/unknown-date rows in the database while hiding them from public defaults, stores derived category/freshness fields for faster QA, and adds review-mode/operations readiness support.
+
+### Schema Changes
+
+Non-destructive columns added to `auction_items`:
+
+- `public_category TEXT NOT NULL DEFAULT 'other'`
+- `freshness_date TEXT NOT NULL DEFAULT ''`
+- `freshness_status TEXT NOT NULL DEFAULT 'unknown_date'`
+- `public_visible BOOLEAN NOT NULL DEFAULT 0`
+
+Non-destructive indexes added if missing:
+
+- `ix_auction_items_public_category`
+- `ix_auction_items_freshness_date`
+- `ix_auction_items_freshness_status`
+- `ix_auction_items_public_visible`
+
+### Data Handling
+
+- Public `/onbid` and `sitemap.xml` default to items dated `2025-01-01` or later.
+- Pre-2025 and unknown-date ONBID rows are not deleted; they are audited and hidden from public defaults.
+- Review hardening also hides sentinel/implausible public dates (`2999-12-30`, `2999-12-31`, `9999-12-31`, `0001-01-01`, and dates beyond the configured max future window) and sample/fixture rows unless `REVIEW_SHOW_SAMPLE=true`.
+- New sync/probe paths count stale and unknown-date payloads as dropped before fresh upsert.
+- `national_property` remains its own public category and is not split into real-estate/movable.
+
+### Review Hardening Addendum
+
+The Cloudflare Tunnel review hardening continuation added no additional schema changes beyond the v005 columns/indexes above. It changed route parsing, public visibility policy, login hint rendering, and public detail form rendering only.
+
+### Migration Method
+
+SQLite uses `ensure_schema_migrations` with `ALTER TABLE ADD COLUMN` and `CREATE INDEX IF NOT EXISTS`. Existing rows can be refreshed with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\repair_onbid_derived_fields.ps1 -DryRun -MinDate 2025-01-01
+```
+
+Apply mode exists but was not run by Codex:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\repair_onbid_derived_fields.ps1 -Apply -MinDate 2025-01-01
+```
+
+### Rollback
+
+Code rollback restores prior behavior. Because SQLite does not easily drop columns safely, added columns/indexes should be left in place unless restoring a pre-v005 DB backup is required.
+
+### Verification
+
+- `py_compile` for changed backend modules and v005 tests
+- v005 tests for navigation, freshness, category mapping, filters, admin readiness, public smoke, sitemap, security headers, legal pages, and review mode
+- Existing ONBID/page/router/auth/operations tests
+- ONBID sample sync and constrained real fresh probes with `Limit=20`, `MaxPages=1`, `MinDate=2025-01-01`
+- Freshness audit dry run and derived-field repair dry run
+
 ## v004 - Real ONBID operations and public category UX
 Change date: 2026-07-06
 

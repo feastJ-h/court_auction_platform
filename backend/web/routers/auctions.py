@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from math import ceil
+from urllib.parse import urlencode
 from fastapi import Body, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -14,8 +15,11 @@ from backend.services.auction_items import (
     find_auction_candidates_for_case,
     find_link_candidates_for_auction,
     get_auction_item,
+    get_onbid_category_counts,
     list_same_notice_items,
     list_auction_items,
+    normalize_public_category,
+    is_onbid_item_public_visible,
     serialize_auction_item,
 )
 from backend.services.audit_logs import create_audit_log
@@ -30,6 +34,53 @@ from backend.web.dependencies import LoginRedirect, RequireAdmin, RequireUser, a
 from backend.workers.onbid_sync import run_onbid_sync
 
 
+def build_query_href(base_path: str, **params) -> str:
+    cleaned = {}
+    for key, value in params.items():
+        if value is None or value == "":
+            continue
+        if key == "category" and value == "all":
+            continue
+        cleaned[key] = value
+    query = urlencode(cleaned)
+    return f"{base_path}?{query}" if query else base_path
+
+
+def build_price_presets(base_path: str, *, category: str, region: str) -> list[dict[str, str]]:
+    return [
+        {"key": "all", "label": "가격 전체", "href": build_query_href(base_path, category=category, region=region)},
+        {"key": "under_100m", "label": "1억 이하", "href": build_query_href(base_path, price_max=100000000, category=category, region=region)},
+        {"key": "100m_300m", "label": "1억-3억", "href": build_query_href(base_path, price_min=100000000, price_max=300000000, category=category, region=region)},
+        {"key": "300m_500m", "label": "3억-5억", "href": build_query_href(base_path, price_min=300000000, price_max=500000000, category=category, region=region)},
+        {"key": "over_500m", "label": "5억 이상", "href": build_query_href(base_path, price_min=500000000, category=category, region=region)},
+    ]
+
+
+def build_category_links(base_path: str, filters: dict, counts: dict[str, int]) -> list[dict[str, str | int]]:
+    labels = {
+        "all": "전체",
+        "real_estate": "부동산",
+        "movable": "동산",
+        "national_property": "국유일반재산",
+        "other": "기타",
+    }
+    return [
+        {
+            "value": value,
+            "label": label,
+            "count": counts.get(value, 0),
+            "href": build_query_href(
+                base_path,
+                category=value,
+                region=filters.get("region"),
+                price_min=filters.get("price_min"),
+                price_max=filters.get("price_max"),
+            ),
+        }
+        for value, label in labels.items()
+    ]
+
+
 def register_auction_routes(
     app: FastAPI,
     templates: Jinja2Templates,
@@ -38,8 +89,37 @@ def register_auction_routes(
     require_admin: RequireAdmin,
     login_redirect: LoginRedirect,
 ) -> None:
-    def _read_price(value: int | None) -> int | None:
-        return value if value and value > 0 else None
+    def _read_int(
+        value,
+        *,
+        minimum: int = 0,
+        maximum: int | None = None,
+        default: int | None = None,
+    ) -> int | None:
+        if value in (None, ""):
+            return default
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            return default
+        if parsed < minimum:
+            return default
+        if maximum is not None and parsed > maximum:
+            return maximum
+        return parsed
+
+    def _read_float(value, *, minimum: float = 0.0, maximum: float | None = None) -> float | None:
+        if value in (None, ""):
+            return None
+        try:
+            parsed = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        if parsed < minimum:
+            return None
+        if maximum is not None and parsed > maximum:
+            return maximum
+        return parsed
 
     def _render_auction_list(
         request: Request,
@@ -65,6 +145,8 @@ def register_auction_routes(
         base_path: str,
     ):
         per_page = 20
+        public_only = base_path == "/onbid"
+        category = normalize_public_category(category)
         with session_scope() as session:
             current_user = require_user(request, session)
             total_count = count_auction_items(
@@ -76,14 +158,15 @@ def register_auction_routes(
                 region=region,
                 usage=usage,
                 agency=agency,
-                price_min=_read_price(price_min),
-                price_max=_read_price(price_max),
-                closing_within_days=closing_within_days,
-                min_discount_rate=min_discount_rate,
+                price_min=_read_int(price_min),
+                price_max=_read_int(price_max),
+                closing_within_days=_read_int(closing_within_days, maximum=365),
+                min_discount_rate=_read_float(min_discount_rate, maximum=100),
                 has_notice=has_notice,
                 has_detail=has_detail,
                 category=category,
-                notice_id=notice_id,
+                public_only=public_only,
+                notice_id=_read_int(notice_id, minimum=1),
                 pbanc_mng_no=pbanc_mng_no,
             )
             total_pages = max(1, ceil(total_count / per_page))
@@ -97,14 +180,15 @@ def register_auction_routes(
                 region=region,
                 usage=usage,
                 agency=agency,
-                price_min=_read_price(price_min),
-                price_max=_read_price(price_max),
-                closing_within_days=closing_within_days,
-                min_discount_rate=min_discount_rate,
+                price_min=_read_int(price_min),
+                price_max=_read_int(price_max),
+                closing_within_days=_read_int(closing_within_days, maximum=365),
+                min_discount_rate=_read_float(min_discount_rate, maximum=100),
                 has_notice=has_notice,
                 has_detail=has_detail,
                 category=category,
-                notice_id=notice_id,
+                public_only=public_only,
+                notice_id=_read_int(notice_id, minimum=1),
                 pbanc_mng_no=pbanc_mng_no,
                 sort=sort,
                 limit=per_page,
@@ -118,40 +202,60 @@ def register_auction_routes(
             )
             for view in item_views:
                 view["preference"] = serialize_preference(preferences.get(view["id"]))
+            filters = {
+                "status": status,
+                "asset_type": asset_type,
+                "keyword": keyword,
+                "linked": linked,
+                "region": region.strip(),
+                "usage": usage,
+                "agency": agency,
+                "price_min": _read_int(price_min) or "",
+                "price_max": _read_int(price_max) or "",
+                "closing_within_days": _read_int(closing_within_days, maximum=365) or "",
+                "min_discount_rate": _read_float(min_discount_rate, maximum=100) or "",
+                "has_notice": has_notice,
+                "has_detail": has_detail,
+                "category": category,
+                "notice_id": _read_int(notice_id, minimum=1) or "",
+                "pbanc_mng_no": pbanc_mng_no,
+                "sort": sort,
+            }
+            category_counts = get_onbid_category_counts(session, public_only=public_only)
             return templates.TemplateResponse(
                 request,
                 "auctions/index.html",
                 {
                     "current_user": current_user,
                     "settings": get_settings(),
+                    "active_section": "onbid",
+                    "active_subsection": "",
+                    "active_category": category,
+                    "page_title": "온비드 공매 공개 목록" if public_only else "공매 목록",
+                    "breadcrumbs": [{"label": "ONBID", "href": base_path}],
+                    "review_mode": get_settings().review_mode,
                     "items": item_views,
                     "base_path": base_path,
-                    "filters": {
-                        "status": status,
-                        "asset_type": asset_type,
-                        "keyword": keyword,
-                        "linked": linked,
-                        "region": region,
-                        "usage": usage,
-                        "agency": agency,
-                        "price_min": price_min or "",
-                        "price_max": price_max or "",
-                        "closing_within_days": closing_within_days or "",
-                        "min_discount_rate": min_discount_rate or "",
-                        "has_notice": has_notice,
-                        "has_detail": has_detail,
-                        "category": category,
-                        "notice_id": notice_id or "",
-                        "pbanc_mng_no": pbanc_mng_no,
-                        "sort": sort,
-                    },
-                    "pagination": {
+                    "filters": filters,
+                    "category_counts": category_counts,
+                    "category_links": build_category_links(base_path, filters, category_counts),
+                    "price_presets": build_price_presets(base_path, category=category, region=filters["region"]),
+                "pagination": {
                         "page": current_page,
                         "pages": list(range(1, total_pages + 1)),
                         "has_prev": current_page > 1,
                         "has_next": current_page < total_pages,
                         "prev_page": max(1, current_page - 1),
                         "next_page": min(total_pages, current_page + 1),
+                        "prev_href": build_query_href(base_path, page=max(1, current_page - 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"]),
+                        "next_href": build_query_href(base_path, page=min(total_pages, current_page + 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"]),
+                        "page_links": [
+                            {
+                                "page": p,
+                                "href": build_query_href(base_path, page=p, region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"]),
+                            }
+                            for p in range(1, total_pages + 1)
+                        ],
                     },
                     "total_count": total_count,
                 },
@@ -160,7 +264,7 @@ def register_auction_routes(
     @app.get("/auctions")
     def auction_list_page(
         request: Request,
-        page: int = Query(1, ge=1),
+        page: str = Query("1"),
         status: str = Query("ALL"),
         asset_type: str = Query("ALL"),
         keyword: str = Query(""),
@@ -169,20 +273,20 @@ def register_auction_routes(
         region: str = Query(""),
         usage: str = Query(""),
         agency: str = Query(""),
-        price_min: int | None = Query(None, ge=0),
-        price_max: int | None = Query(None, ge=0),
-        closing_within_days: int | None = Query(None, ge=0, le=365),
-        min_discount_rate: float | None = Query(None, ge=0, le=100),
+        price_min: str = Query(""),
+        price_max: str = Query(""),
+        closing_within_days: str = Query(""),
+        min_discount_rate: str = Query(""),
         has_notice: str = Query("ALL"),
         has_detail: str = Query("ALL"),
         category: str = Query("all"),
-        notice_id: int | None = Query(None),
+        notice_id: str = Query(""),
         pbanc_mng_no: str = Query(""),
         sort: str = Query("closing_soon"),
     ):
         return _render_auction_list(
             request,
-            page=page,
+            page=_read_int(page, minimum=1, default=1) or 1,
             status=status,
             asset_type=asset_type,
             keyword=q or keyword,
@@ -206,7 +310,7 @@ def register_auction_routes(
     @app.get("/onbid")
     def onbid_list_page(
         request: Request,
-        page: int = Query(1, ge=1),
+        page: str = Query("1"),
         status: str = Query("ALL"),
         asset_type: str = Query("ALL"),
         q: str = Query(""),
@@ -215,20 +319,20 @@ def register_auction_routes(
         region: str = Query(""),
         usage: str = Query(""),
         agency: str = Query(""),
-        price_min: int | None = Query(None, ge=0),
-        price_max: int | None = Query(None, ge=0),
-        closing_within_days: int | None = Query(None, ge=0, le=365),
-        min_discount_rate: float | None = Query(None, ge=0, le=100),
+        price_min: str = Query(""),
+        price_max: str = Query(""),
+        closing_within_days: str = Query(""),
+        min_discount_rate: str = Query(""),
         has_notice: str = Query("ALL"),
         has_detail: str = Query("ALL"),
         category: str = Query("all"),
-        notice_id: int | None = Query(None),
+        notice_id: str = Query(""),
         pbanc_mng_no: str = Query(""),
         sort: str = Query("closing_soon"),
     ):
         return _render_auction_list(
             request,
-            page=page,
+            page=_read_int(page, minimum=1, default=1) or 1,
             status=status,
             asset_type=asset_type,
             keyword=q or keyword,
@@ -263,6 +367,8 @@ def register_auction_routes(
             item = get_auction_item(session, auction_item_id)
             if item is None:
                 raise HTTPException(status_code=404, detail="Auction item not found.")
+            if base_path == "/onbid" and current_user is None and not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Auction item not found.")
             preference = get_preference(session, current_user.id, auction_item_id) if current_user else None
             same_notice_items = [serialize_auction_item(other) for other in list_same_notice_items(session, item, limit=20)]
             return templates.TemplateResponse(
@@ -271,6 +377,15 @@ def register_auction_routes(
                 {
                     "current_user": current_user,
                     "settings": get_settings(),
+                    "active_section": "onbid",
+                    "active_subsection": "",
+                    "active_category": serialize_auction_item(item)["category"],
+                "page_title": item.item_name or "온비드 상세",
+                    "breadcrumbs": [
+                        {"label": "ONBID", "href": base_path},
+                        {"label": item.item_name or str(item.id), "href": ""},
+                    ],
+                    "review_mode": get_settings().review_mode,
                     "item": item,
                     "view": serialize_auction_item(item),
                     "same_notice_items": same_notice_items,
@@ -295,6 +410,8 @@ def register_auction_routes(
         next_url: str,
     ):
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect(next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}")
@@ -345,6 +462,8 @@ def register_auction_routes(
     @app.post("/api/onbid/{auction_item_id}/preference")
     def save_onbid_preference_api(request: Request, auction_item_id: int, payload: dict = Body(...)):
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 raise HTTPException(status_code=401, detail="Login required.")
@@ -378,6 +497,12 @@ def register_auction_routes(
                 {
                     "current_user": current_user,
                     "settings": get_settings(),
+                    "active_section": "my",
+                    "active_subsection": preference_type,
+                    "active_category": "",
+                    "page_title": title,
+                    "breadcrumbs": [{"label": "My ONBID", "href": "/my/onbid/favorites"}],
+                    "review_mode": get_settings().review_mode,
                     "items": views,
                     "preference_type": preference_type,
                     "title": title,
@@ -405,17 +530,23 @@ def register_auction_routes(
     def sync_onbid_auctions_api(
         request: Request,
         sample: bool = Query(True),
-        limit: int = Query(20, ge=1, le=100),
-        max_pages: int = Query(1, ge=1, le=10),
+        limit: int = Query(20, ge=1, le=20),
+        max_pages: int = Query(1, ge=1, le=1),
         api_kind: str = Query("real_estate", pattern="^(real_estate|movable|all|notice|national_property)$"),
         include_details: bool = Query(False),
         include_notice_details: bool = Query(False),
         include_notice_items: bool = Query(False),
+        min_date: str = Query("2025-01-01"),
     ) -> dict:
         with session_scope() as session:
             current_user = require_admin(request, session)
             if current_user is None:
                 raise admin_login_required()
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables admin mutations.")
+        if not sample:
+            if limit > 20 or max_pages > 1 or min_date != "2025-01-01":
+                raise HTTPException(status_code=422, detail="Real ONBID calls require Limit=20, MaxPages=1, MinDate=2025-01-01.")
         result = run_onbid_sync(
             limit=limit,
             sample=sample,
@@ -424,6 +555,7 @@ def register_auction_routes(
             include_details=include_details,
             include_notice_details=include_notice_details,
             include_notice_items=include_notice_items,
+            min_date=min_date,
         )
         with session_scope() as session:
             current_user = require_admin(request, session)

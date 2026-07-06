@@ -7,7 +7,11 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-100 text-zinc-950">
+  {% include "shared/review_banner.html" %}
+  {% include "shared/public_nav.html" %}
   <main class="mx-auto max-w-6xl px-5 py-8">
+    {% include "shared/breadcrumbs.html" %}
+    {% include "shared/admin_nav.html" %}
     <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <p class="text-sm font-semibold text-indigo-700">Admin Console</p>

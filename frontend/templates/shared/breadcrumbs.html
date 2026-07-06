@@ -1,0 +1,12 @@
+{% if breadcrumbs %}
+  <nav class="mb-4 text-xs font-bold text-zinc-500" aria-label="Breadcrumb">
+    {% for crumb in breadcrumbs %}
+      {% if crumb.href %}
+        <a class="text-zinc-700 hover:text-emerald-700" href="{{ crumb.href }}">{{ crumb.label }}</a>
+      {% else %}
+        <span>{{ crumb.label }}</span>
+      {% endif %}
+      {% if not loop.last %}<span class="mx-1">/</span>{% endif %}
+    {% endfor %}
+  </nav>
+{% endif %}

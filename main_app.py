@@ -37,6 +37,7 @@ from backend.services.auth import (
     change_user_password,
     get_user_by_id,
 )
+from backend.services.auction_items import apply_public_onbid_freshness_filter
 from backend.services.user_event_notes import get_user_event_note_map
 from backend.web.routers.admin_operations import register_admin_operation_routes
 from backend.web.routers.admin_users import register_admin_user_routes
@@ -58,6 +59,19 @@ app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "frontend" / "stat
 
 SESSION_COOKIE_NAME = "court_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 12
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if get_settings().review_mode:
+        response.headers.setdefault("X-Robots-Tag", "noindex, noarchive")
+        response.headers.setdefault("X-Review-Mode", "true")
+    return response
 
 
 def login_redirect(next_url: str = "/user") -> RedirectResponse:
@@ -381,6 +395,11 @@ def root(request: Request):
             {
                 "current_user": current_user,
                 "settings": get_settings(),
+                "active_section": "home",
+                "active_subsection": "",
+                "active_category": "",
+                "breadcrumbs": [],
+                "review_mode": get_settings().review_mode,
             },
         )
 
@@ -391,7 +410,15 @@ def about_page(request: Request):
         return templates.TemplateResponse(
             request,
             "public/about.html",
-            {"current_user": require_user(request, session)},
+            {
+                "current_user": require_user(request, session),
+                "settings": get_settings(),
+                "active_section": "home",
+                "active_subsection": "",
+                "active_category": "",
+                "breadcrumbs": [{"label": "소개", "href": "/about"}],
+                "review_mode": get_settings().review_mode,
+            },
         )
 
 
@@ -401,7 +428,15 @@ def disclaimer_page(request: Request):
         return templates.TemplateResponse(
             request,
             "public/disclaimer.html",
-            {"current_user": require_user(request, session)},
+            {
+                "current_user": require_user(request, session),
+                "settings": get_settings(),
+                "active_section": "legal",
+                "active_subsection": "disclaimer",
+                "active_category": "",
+                "breadcrumbs": [{"label": "고지사항", "href": "/disclaimer"}],
+                "review_mode": get_settings().review_mode,
+            },
         )
 
 
@@ -416,7 +451,15 @@ def privacy_page(request: Request):
         return templates.TemplateResponse(
             request,
             "public/privacy_draft.html",
-            {"current_user": require_user(request, session)},
+            {
+                "current_user": require_user(request, session),
+                "settings": get_settings(),
+                "active_section": "legal",
+                "active_subsection": "privacy",
+                "active_category": "",
+                "breadcrumbs": [{"label": "개인정보 처리방침", "href": "/privacy"}],
+                "review_mode": get_settings().review_mode,
+            },
         )
 
 
@@ -426,7 +469,15 @@ def terms_page(request: Request):
         return templates.TemplateResponse(
             request,
             "public/terms.html",
-            {"current_user": require_user(request, session)},
+            {
+                "current_user": require_user(request, session),
+                "settings": get_settings(),
+                "active_section": "legal",
+                "active_subsection": "terms",
+                "active_category": "",
+                "breadcrumbs": [{"label": "이용약관", "href": "/terms"}],
+                "review_mode": get_settings().review_mode,
+            },
         )
 
 
@@ -453,13 +504,13 @@ def robots_txt() -> Response:
 def sitemap_xml() -> Response:
     paths = ["/", "/onbid", "/cases", "/about", "/disclaimer", "/privacy", "/terms"]
     with session_scope() as session:
+        onbid_statement = apply_public_onbid_freshness_filter(
+            select(AuctionItem.id).where(AuctionItem.source == "ONBID", AuctionItem.item_name != "")
+        )
         onbid_ids = [
             item_id
             for item_id in session.scalars(
-                select(AuctionItem.id)
-                .where(AuctionItem.source == "ONBID", AuctionItem.item_name != "")
-                .order_by(AuctionItem.updated_at.desc(), AuctionItem.id.desc())
-                .limit(100)
+                onbid_statement.order_by(AuctionItem.updated_at.desc(), AuctionItem.id.desc()).limit(100)
             )
         ]
         case_ids = [
@@ -480,12 +531,20 @@ def sitemap_xml() -> Response:
 
 @app.get("/login")
 def login_page(request: Request, next: str = Query("/user"), error: str = Query("")):
+    settings = get_settings()
     return templates.TemplateResponse(
         request,
         "auth/login.html",
         {
             "next_url": next if next.startswith("/") else "/user",
             "error": error,
+            "active_section": "auth",
+            "active_subsection": "",
+            "active_category": "",
+            "breadcrumbs": [{"label": "로그인", "href": "/login"}],
+            "settings": settings,
+            "show_local_admin_hint": settings.local_dev_login_hint and not settings.review_mode,
+            "review_mode": settings.review_mode,
         },
     )
 

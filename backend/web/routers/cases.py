@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, datetime
 from math import ceil
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -47,6 +48,30 @@ def register_case_routes(
     attach_user_note_metadata: AttachUserNotes,
     build_event_payload: BuildEventPayload,
 ) -> None:
+    def _read_int(value, *, minimum: int = 0, maximum: int | None = None) -> int | None:
+        if value in (None, ""):
+            return None
+        try:
+            parsed = int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        if parsed < minimum:
+            return None
+        if maximum is not None and parsed > maximum:
+            return maximum
+        return parsed
+
+    def build_case_query_href(base_path: str, **params) -> str:
+        cleaned: dict[str, str] = {}
+        for key, value in params.items():
+            if value in (None, ""):
+                continue
+            if key == "category" and str(value).strip() == "ALL":
+                continue
+            cleaned[key] = str(value)
+        query = urlencode(cleaned)
+        return f"{base_path}?{query}" if query else base_path
+
     def _safe_external_url(value: str) -> str:
         text = str(value or "").strip()
         return text if text.startswith(("http://", "https://")) else ""
@@ -93,7 +118,7 @@ def register_case_routes(
     @app.get("/cases")
     def public_case_list(
         request: Request,
-        page: int = Query(1, ge=1),
+        page: str = Query("1"),
         q: str = Query(""),
         category: str = Query("ALL"),
         region: str = Query(""),
@@ -106,7 +131,7 @@ def register_case_routes(
             current_user = require_user(request, session)
             total_count = count_user_events(session)
             total_pages = max(1, ceil(total_count / per_page))
-            current_page = min(page, total_pages)
+            current_page = min(_read_int(page, minimum=1) or 1, total_pages)
             events = list_user_events_page(session, limit=per_page, offset=(current_page - 1) * per_page)
             views = [_public_case_view(event) for event in events]
             if q:
@@ -124,28 +149,42 @@ def register_case_routes(
                 views = [view for view in views if view["notice_date"] >= notice_date_from]
             if expire_date_to:
                 views = [view for view in views if view["expire_date"] <= expire_date_to]
+            filters = {
+                "q": q,
+                "category": category,
+                "region": region,
+                "status": status,
+                "notice_date_from": notice_date_from,
+                "expire_date_to": expire_date_to,
+            }
             return templates.TemplateResponse(
                 request,
                 "cases/index.html",
                 {
                     "current_user": current_user,
                     "settings": get_settings(),
+                    "active_section": "cases",
+                    "active_subsection": "",
+                    "active_category": filters.get("category", "ALL"),
+                    "page_title": "회생·파산 공고",
+                    "breadcrumbs": [{"label": "회생·파산", "href": "/cases"}],
+                    "review_mode": get_settings().review_mode,
                     "cases": views,
-                    "filters": {
-                        "q": q,
-                        "category": category,
-                        "region": region,
-                        "status": status,
-                        "notice_date_from": notice_date_from,
-                        "expire_date_to": expire_date_to,
-                    },
+                    "filters": filters,
                     "pagination": {
                         "page": current_page,
                         "pages": list(range(1, total_pages + 1)),
                         "has_prev": current_page > 1,
                         "has_next": current_page < total_pages,
-                        "prev_page": max(1, current_page - 1),
-                        "next_page": min(total_pages, current_page + 1),
+                        "prev_href": build_case_query_href("/cases", page=max(1, current_page - 1), q=filters["q"], category=filters["category"]),
+                        "next_href": build_case_query_href("/cases", page=min(total_pages, current_page + 1), q=filters["q"], category=filters["category"]),
+                        "page_links": [
+                            {
+                                "page": index,
+                                "href": build_case_query_href("/cases", page=index, q=filters["q"], category=filters["category"]),
+                            }
+                            for index in range(1, total_pages + 1)
+                        ],
                     },
                     "total_count": total_count,
                 },
@@ -164,6 +203,15 @@ def register_case_routes(
                 {
                     "current_user": current_user,
                     "settings": get_settings(),
+                    "active_section": "cases",
+                    "active_subsection": "",
+                    "active_category": "",
+                    "page_title": event.title or "사건 상세",
+                    "breadcrumbs": [
+                        {"label": "회생·파산", "href": "/cases"},
+                        {"label": event.case_number, "href": ""},
+                    ],
+                    "review_mode": get_settings().review_mode,
                     "case": _public_case_view(event),
                 },
             )
@@ -206,6 +254,12 @@ def register_case_routes(
                 "user/index.html",
                 {
                     "events": events,
+                    "active_section": "my",
+                    "active_subsection": "",
+                    "active_category": "",
+                    "page_title": "내 대시보드",
+                    "breadcrumbs": [{"label": "My", "href": "/user"}],
+                    "review_mode": get_settings().review_mode,
                     "event_payload": event_payload,
                     "total_count": total_count,
                     "current_user": current_user,
@@ -236,6 +290,12 @@ def register_case_routes(
                 "user/passed.html",
                 {
                     "events": events,
+                    "active_section": "my",
+                    "active_subsection": "passed",
+                    "active_category": "",
+                    "page_title": "패스한 사건",
+                    "breadcrumbs": [{"label": "My", "href": "/user"}],
+                    "review_mode": get_settings().review_mode,
                     "current_user": current_user,
                 },
             )
@@ -252,6 +312,12 @@ def register_case_routes(
                 "user/action_list.html",
                 {
                     "events": events,
+                    "active_section": "my",
+                    "active_subsection": action_type,
+                    "active_category": "",
+                    "page_title": title,
+                    "breadcrumbs": [{"label": "My", "href": "/user"}],
+                    "review_mode": get_settings().review_mode,
                     "current_user": current_user,
                     "title": title,
                     "description": description,
@@ -291,6 +357,8 @@ def register_case_routes(
     @app.post("/user/events/{event_id}/pass")
     def pass_user_event(request: Request, event_id: int) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user")
@@ -301,6 +369,8 @@ def register_case_routes(
     @app.post("/user/events/{event_id}/unpass")
     def unpass_user_event_route(request: Request, event_id: int) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user/passed")
@@ -311,6 +381,8 @@ def register_case_routes(
     @app.post("/user/events/{event_id}/bookmark")
     def bookmark_user_event(request: Request, event_id: int) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user")
@@ -321,6 +393,8 @@ def register_case_routes(
     @app.post("/user/events/{event_id}/unbookmark")
     def unbookmark_user_event(request: Request, event_id: int) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user/bookmarks")
@@ -331,6 +405,8 @@ def register_case_routes(
     @app.post("/user/events/{event_id}/watch")
     def watch_user_event(request: Request, event_id: int) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user")
@@ -341,6 +417,8 @@ def register_case_routes(
     @app.post("/user/events/{event_id}/unwatch")
     def unwatch_user_event(request: Request, event_id: int) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user/watching")
@@ -357,6 +435,8 @@ def register_case_routes(
         next_url: str = Form("/user"),
     ) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect("/user")

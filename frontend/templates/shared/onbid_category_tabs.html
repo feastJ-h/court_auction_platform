@@ -1,0 +1,13 @@
+<div
+  class="mt-3 flex flex-wrap gap-2 text-xs font-bold"
+  data-nav-scope="local-filter"
+  data-onbid-category-tabs="true"
+  data-active-section="{{ active_section|default('') }}"
+  data-active-category="{{ active_category|default('') }}"
+>
+  {% for link in category_links %}
+    <a class="rounded-full px-3 py-1.5 {% if active_category == link.value %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white text-zinc-800{% endif %}" data-category-tab="{{ link.value }}" href="{{ link.href }}" {% if active_category == link.value %}aria-current="page"{% endif %}>
+      {{ link.label }} <span class="opacity-75">{{ link.count }}</span>
+    </a>
+  {% endfor %}
+</div>

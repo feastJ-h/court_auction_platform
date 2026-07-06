@@ -14,6 +14,7 @@ if TEST_DB_PATH.exists():
 
 os.environ["DB_URL"] = f"sqlite:///{TEST_DB_PATH}"
 os.environ["APP_SECRET_KEY"] = "onbid-category-test-secret"
+os.environ["REVIEW_SHOW_SAMPLE"] = "true"
 
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402

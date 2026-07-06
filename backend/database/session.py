@@ -82,10 +82,18 @@ def ensure_schema_migrations(db_engine: Engine) -> None:
             "onbid_cltr_no": "ALTER TABLE auction_items ADD COLUMN onbid_cltr_no TEXT NOT NULL DEFAULT ''",
             "pbct_no": "ALTER TABLE auction_items ADD COLUMN pbct_no TEXT NOT NULL DEFAULT ''",
             "pbct_nsq": "ALTER TABLE auction_items ADD COLUMN pbct_nsq TEXT NOT NULL DEFAULT ''",
+            "public_category": "ALTER TABLE auction_items ADD COLUMN public_category TEXT NOT NULL DEFAULT 'other'",
+            "freshness_date": "ALTER TABLE auction_items ADD COLUMN freshness_date TEXT NOT NULL DEFAULT ''",
+            "freshness_status": "ALTER TABLE auction_items ADD COLUMN freshness_status TEXT NOT NULL DEFAULT 'unknown_date'",
+            "public_visible": "ALTER TABLE auction_items ADD COLUMN public_visible BOOLEAN NOT NULL DEFAULT 0",
         }
         for column_name, ddl in auction_item_migrations.items():
             if column_name not in auction_item_columns:
                 connection.execute(text(ddl))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_auction_items_public_category ON auction_items(public_category)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_auction_items_freshness_date ON auction_items(freshness_date)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_auction_items_freshness_status ON auction_items(freshness_status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_auction_items_public_visible ON auction_items(public_visible)"))
 
         auction_notice_columns = {
             row[1]

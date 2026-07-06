@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import AuctionItem, AuctionNotice, AuctionNoticeItemLink, CrawlRun
-from backend.services.auction_items import build_onbid_info_badges, derive_onbid_category
+from backend.services.auction_items import audit_onbid_freshness, build_onbid_info_badges, derive_onbid_category, get_onbid_category_counts
 
 
 def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dict[str, Any]:
@@ -52,7 +52,9 @@ def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dic
     latest_failure = next((run for run in recent_runs if run.status == "FAILED"), None)
     distribution = get_onbid_deadline_distribution(session)
     category_counts = get_onbid_category_counts(session)
+    public_category_counts = get_onbid_category_counts(session, public_only=True)
     missing_summary = get_onbid_missing_summary(session)
+    freshness_summary = audit_onbid_freshness(session)
     return {
         "days": max(1, days),
         "items": {
@@ -78,6 +80,8 @@ def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dic
         },
         "deadline_distribution": distribution,
         "categories": category_counts,
+        "public_categories": public_category_counts,
+        "freshness": freshness_summary,
         "missing": missing_summary,
     }
 
@@ -118,7 +122,7 @@ def get_onbid_deadline_distribution(session: Session) -> dict[str, int]:
     return buckets
 
 
-def get_onbid_category_counts(session: Session) -> dict[str, int]:
+def get_onbid_category_counts_legacy(session: Session) -> dict[str, int]:
     counts = {"real_estate": 0, "movable": 0, "national_property": 0, "other": 0}
     items = session.scalars(select(AuctionItem).where(AuctionItem.source == "ONBID"))
     for item in items:

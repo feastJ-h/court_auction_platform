@@ -18,6 +18,7 @@ os.environ["APP_SECRET_KEY"] = "public-boundary-test-secret"
 from fastapi.testclient import TestClient  # noqa: E402
 from sqlalchemy import select  # noqa: E402
 
+from backend.config import get_settings  # noqa: E402
 from backend.database.models import (  # noqa: E402
     AiAnalysis,
     Asset,
@@ -103,6 +104,7 @@ def main() -> int:
     init_db()
     event_id, auction_item_id, raw_doc_id = seed_data()
     client = TestClient(app)
+    review_mode = get_settings().review_mode
 
     for path in ("/", "/onbid", f"/onbid/{auction_item_id}", "/cases", f"/cases/{event_id}", "/about", "/disclaimer", "/privacy", "/terms", "/robots.txt", "/sitemap.xml"):
         response = client.get(path)
@@ -116,33 +118,52 @@ def main() -> int:
     assert "https://example.test/case" in case_page.text
 
     raw_response = client.get(f"/documents/raw/{raw_doc_id}")
-    assert raw_response.status_code == 401, raw_response.status_code
+    assert raw_response.status_code in (401, 403), raw_response.status_code
 
     admin_page = client.get("/admin", follow_redirects=False)
     assert admin_page.status_code in (302, 303), admin_page.status_code
     admin_api = client.get("/api/admin/onbid-quality")
     assert admin_api.status_code == 401, admin_api.status_code
 
+    anonymous_onbid_detail = client.get(f"/onbid/{auction_item_id}")
+    assert f'action="/onbid/{auction_item_id}/preference"' not in anonymous_onbid_detail.text
+    assert f"/login?next=/onbid/{auction_item_id}" in anonymous_onbid_detail.text
+
     preference_post = client.post(
         f"/onbid/{auction_item_id}/preference",
         data={"action": "favorite", "enabled": "true", "next_url": f"/onbid/{auction_item_id}"},
         follow_redirects=False,
     )
-    assert preference_post.status_code in (302, 303), preference_post.status_code
-    assert "/login" in preference_post.headers["location"]
+    if review_mode:
+        assert preference_post.status_code == 403, preference_post.status_code
+    else:
+        assert preference_post.status_code in (302, 303), preference_post.status_code
+        assert "/login" in preference_post.headers["location"]
 
     preference_api = client.post(f"/api/onbid/{auction_item_id}/preference", json={"favorite": True})
-    assert preference_api.status_code == 401, preference_api.status_code
+    assert preference_api.status_code == (403 if review_mode else 401), preference_api.status_code
 
     with session_scope() as session:
         assert session.scalar(select(UserAuctionPreference)) is None
 
     cookies = login_user(client)
+    logged_in_onbid_detail = client.get(f"/onbid/{auction_item_id}", cookies=cookies)
+    assert f'action="/onbid/{auction_item_id}/preference"' in logged_in_onbid_detail.text
     saved = client.post(
         f"/api/onbid/{auction_item_id}/preference",
         cookies=cookies,
         json={"favorite": True, "watching": True, "note": "검토 메모"},
     )
+    if review_mode:
+        assert saved.status_code == 403, saved.status_code
+        with session_scope() as session:
+            assert session.scalar(select(UserAuctionPreference)) is None
+        my_page = client.get("/my/onbid/favorites", cookies=cookies)
+        assert my_page.status_code == 200, my_page.status_code
+        print(f"isolated_db={TEST_DB_PATH}")
+        print("PASS - public access and auth boundary")
+        return 0
+
     assert saved.status_code == 200, saved.text
     payload = saved.json()["preference"]
     assert payload["is_favorite"] is True

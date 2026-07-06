@@ -112,6 +112,13 @@ def register_admin_operation_routes(
                     "current_provider": runtime["analysis_provider"],
                     "chatgpt_ready": bool(settings.chatgpt_api_key or settings.openai_api_key),
                     "current_user": current_user,
+                    "settings": settings,
+                    "active_section": "admin",
+                    "active_subsection": "operations_readiness",
+                    "active_category": "",
+                    "page_title": "Admin readiness",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}],
+                    "review_mode": settings.review_mode,
                     "filters": {
                         "job_status": job_status,
                         "model": model,
@@ -126,6 +133,8 @@ def register_admin_operation_routes(
             current_user = require_admin(request, session)
             if current_user is None:
                 return login_redirect("/admin")
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables admin mutations.")
             write_analysis_provider(analysis_provider)
         return RedirectResponse(url="/admin", status_code=303)
 
@@ -142,6 +151,13 @@ def register_admin_operation_routes(
                 "admin/section_placeholder.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": section_name,
+                    "active_category": "",
+                    "page_title": section[0],
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}],
+                    "review_mode": get_settings().review_mode,
                     "section_name": section_name,
                     "section_title": section[0],
                     "section_description": section[1],
@@ -163,6 +179,13 @@ def register_admin_operation_routes(
                 "admin/assets.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "assets",
+                    "active_category": "",
+                    "page_title": "Admin assets",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}],
+                    "review_mode": get_settings().review_mode,
                     "events": events,
                     "collection_quality": build_collection_quality_summary(session),
                     "auction_count": count_auction_items(session),
@@ -187,6 +210,13 @@ def register_admin_operation_routes(
                 "admin/analysis.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "analysis",
+                    "active_category": "",
+                    "page_title": "Admin analysis",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}],
+                    "review_mode": get_settings().review_mode,
                     "events": events,
                     "job_counts": count_jobs_by_status(session),
                     "model_result_counts": count_results_by_provider(session),
@@ -205,6 +235,13 @@ def register_admin_operation_routes(
                 "admin/collection.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "collection",
+                    "active_category": "",
+                    "page_title": "Collection operations",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}],
+                    "review_mode": get_settings().review_mode,
                     "collection_quality": build_collection_quality_summary(session),
                     "crawl_summary": build_crawl_run_summary(session),
                     "onbid_metrics": build_onbid_observability_summary(session),
@@ -226,9 +263,44 @@ def register_admin_operation_routes(
                 "admin/reviews.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "reviews",
+                    "active_category": "",
+                    "page_title": "Admin reviews",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}],
+                    "review_mode": get_settings().review_mode,
                     "analysis_review_summary": build_analysis_review_summary(session),
                     "recent_reviews": list_recent_analysis_reviews(session, limit=30),
                     "recent_audit_logs": list_recent_audit_logs(session, limit=30),
+                },
+            )
+
+    @app.get("/admin/operations-readiness")
+    def admin_operations_readiness_page(request: Request):
+        return admin_dashboard(request, "ALL", "ALL", "ALL")
+
+    @app.get("/admin/onbid-runs")
+    def admin_onbid_runs_page(request: Request):
+        with session_scope() as session:
+            current_user = require_admin(request, session)
+            if current_user is None:
+                return login_redirect("/admin/onbid-runs")
+            return templates.TemplateResponse(
+                request,
+                "admin/collection.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "run_history",
+                    "active_category": "",
+                    "page_title": "ONBID run history",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}, {"label": "ONBID runs", "href": "/admin/onbid-runs"}],
+                    "review_mode": get_settings().review_mode,
+                    "collection_quality": build_collection_quality_summary(session),
+                    "crawl_summary": build_crawl_run_summary(session),
+                    "onbid_metrics": build_onbid_observability_summary(session),
                 },
             )
 

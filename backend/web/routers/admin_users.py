@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from fastapi import FastAPI, Form, Query, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from backend.database.session import session_scope
+from backend.config import get_settings
 from backend.services.audit_logs import create_audit_log
 from backend.services.auth import create_user, list_users, set_user_active, set_user_role
 from backend.web.dependencies import LoginRedirect, RequireAdmin
@@ -28,6 +29,13 @@ def register_admin_user_routes(
                 "admin/users.html",
                 {
                     "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "users",
+                    "active_category": "",
+                    "page_title": "Admin users",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}, {"label": "Users", "href": "/admin/users"}],
+                    "review_mode": get_settings().review_mode,
                     "users": list_users(session),
                     "error": error,
                 },
@@ -42,6 +50,8 @@ def register_admin_user_routes(
         role: str = Form("user"),
     ) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables admin mutations.")
             current_user = require_admin(request, session)
             if current_user is None:
                 return login_redirect("/admin/users")
@@ -69,6 +79,8 @@ def register_admin_user_routes(
     @app.post("/admin/users/{user_id}/active")
     def admin_set_user_active(request: Request, user_id: int, is_active: bool = Form(...)) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables admin mutations.")
             current_user = require_admin(request, session)
             if current_user is None:
                 return login_redirect("/admin/users")
@@ -92,6 +104,8 @@ def register_admin_user_routes(
     @app.post("/admin/users/{user_id}/role")
     def admin_set_user_role(request: Request, user_id: int, role: str = Form(...)) -> RedirectResponse:
         with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables admin mutations.")
             current_user = require_admin(request, session)
             if current_user is None:
                 return login_redirect("/admin/users")

@@ -8,6 +8,8 @@ from backend.database.session import init_db, session_scope
 from backend.database.models import CrawlRun
 from backend.onbid.client import OnbidClient, first_value, normalize_onbid_api_item
 from backend.services.auction_items import (
+    evaluate_onbid_payload_freshness,
+    FRESHNESS_FRESH,
     upsert_auction_item,
     upsert_auction_notice_item_link,
     upsert_auction_notice_payload,
@@ -31,6 +33,7 @@ def run_onbid_sync(
     include_notice_details: bool = False,
     include_notice_items: bool = False,
     run_type: str = "",
+    min_date: str = "2025-01-01",
 ) -> dict:
     init_db()
     today = datetime.now(tz=KST).date().isoformat()
@@ -108,6 +111,8 @@ def run_onbid_sync(
             fetched_sources.append("notice")
         if not fetched_sources:
             raise ValueError(f"Unsupported ONBID api_kind: {api_kind}")
+        payloads, payload_freshness = filter_fresh_payloads(payloads, min_date=min_date)
+        notice_bundles, notice_freshness = filter_fresh_notice_bundles(notice_bundles, min_date=min_date)
         created_count = 0
         duplicate_count = 0
         notice_inserted = 0
@@ -163,9 +168,13 @@ def run_onbid_sync(
             "include_notice_details": include_notice_details,
             "include_notice_items": include_notice_items,
             "max_pages": max(1, max_pages),
+            "min_date": min_date,
             "fetched_sources": fetched_sources,
-            "fetched": len(payloads),
-            "notices_fetched": len(notice_bundles),
+            "fetched": payload_freshness["input"],
+            "accepted_fresh": payload_freshness["accepted_fresh"] + notice_freshness["accepted_fresh_items"],
+            "dropped_stale": payload_freshness["dropped_stale"] + notice_freshness["dropped_stale"] + notice_freshness["dropped_stale_items"],
+            "dropped_unknown_date": payload_freshness["dropped_unknown_date"] + notice_freshness["dropped_unknown_date"] + notice_freshness["dropped_unknown_date_items"],
+            "notices_fetched": notice_freshness["input"],
             "notice_items_fetched": notice_item_inserted + notice_item_duplicates,
             "total_count": total_count,
             "inserted": created_count,
@@ -199,6 +208,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--include-notice-items", action="store_true")
     parser.add_argument("--sample", action="store_true")
     parser.add_argument("--run-type", default="")
+    parser.add_argument("--min-date", default="2025-01-01")
     parser.add_argument("--log-path", default="")
     return parser.parse_args()
 
@@ -218,6 +228,7 @@ def main() -> int:
         include_notice_details=args.include_notice_details,
         include_notice_items=args.include_notice_items,
         run_type=args.run_type,
+        min_date=args.min_date,
     )
     print(result)
     return 0 if result.get("status") == "SUCCEEDED" else 1
@@ -368,6 +379,50 @@ def collect_notice_pages(
         if sample or not notice_payloads or len(notice_payloads) < limit:
             break
     return bundles, total_count, used_sample
+
+
+def filter_fresh_payloads(payloads: list[dict], *, min_date: str) -> tuple[list[dict], dict[str, int]]:
+    summary = {"input": len(payloads), "accepted_fresh": 0, "dropped_stale": 0, "dropped_unknown_date": 0}
+    accepted: list[dict] = []
+    for payload in payloads:
+        freshness = evaluate_onbid_payload_freshness(payload, min_date=min_date)
+        if freshness["freshness_status"] == FRESHNESS_FRESH:
+            accepted.append(payload)
+            summary["accepted_fresh"] += 1
+        elif freshness["freshness_status"] == "stale":
+            summary["dropped_stale"] += 1
+        else:
+            summary["dropped_unknown_date"] += 1
+    return accepted, summary
+
+
+def filter_fresh_notice_bundles(bundles: list[dict], *, min_date: str) -> tuple[list[dict], dict[str, int]]:
+    summary = {
+        "input": len(bundles),
+        "accepted_fresh": 0,
+        "dropped_stale": 0,
+        "dropped_unknown_date": 0,
+        "accepted_fresh_items": 0,
+        "dropped_stale_items": 0,
+        "dropped_unknown_date_items": 0,
+    }
+    accepted_bundles: list[dict] = []
+    for bundle in bundles:
+        freshness = evaluate_onbid_payload_freshness(bundle["payload"], min_date=min_date)
+        if freshness["freshness_status"] == FRESHNESS_FRESH:
+            summary["accepted_fresh"] += 1
+            accepted_bundle = dict(bundle)
+            items, item_summary = filter_fresh_payloads(list(bundle.get("items") or []), min_date=min_date)
+            accepted_bundle["items"] = items
+            summary["accepted_fresh_items"] += item_summary["accepted_fresh"]
+            summary["dropped_stale_items"] += item_summary["dropped_stale"]
+            summary["dropped_unknown_date_items"] += item_summary["dropped_unknown_date"]
+            accepted_bundles.append(accepted_bundle)
+        elif freshness["freshness_status"] == "stale":
+            summary["dropped_stale"] += 1
+        else:
+            summary["dropped_unknown_date"] += 1
+    return accepted_bundles, summary
 
 
 if __name__ == "__main__":

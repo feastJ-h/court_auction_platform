@@ -3,24 +3,24 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>개인정보 처리방침 초안 | Court Auction</title>
+  <title>개인정보 처리방침 | Court Auction</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-50 text-zinc-950">
+  {% include "shared/review_banner.html" %}
+  {% include "shared/public_nav.html" %}
   <main class="mx-auto max-w-4xl px-4 py-8">
-    <nav class="mb-6 flex flex-wrap gap-2 text-sm font-bold">
-      <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/">홈</a>
-      <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/disclaimer">고지사항</a>
-    </nav>
+    {% include "shared/breadcrumbs.html" %}
     <section class="rounded-md border border-zinc-200 bg-white p-6">
       <p class="text-sm font-black text-amber-700">Draft</p>
-      <h1 class="mt-1 text-2xl font-black">개인정보 처리방침 초안</h1>
+      <h1 class="mt-1 text-2xl font-black">개인정보 처리방침 (베타 초안)</h1>
       <div class="mt-4 space-y-3 leading-7 text-zinc-700">
-        <p>이 문서는 베타 공개 전 검토를 위한 초안입니다.</p>
-        <p>로그인 기능은 계정 식별, 관심·패스·감시·메모 저장, 관리자 권한 확인을 위해 최소 계정 정보를 사용합니다.</p>
-        <p>실제 베타 공개 전 운영 주체, 문의처, 보유 기간, 제3자 제공 여부, 파기 절차를 정식 문서로 확정해야 합니다.</p>
+        <p>개인정보는 필요한 범위에서 최소 수집되며, 보관 및 접근은 내부 보안 정책에 따라 제한됩니다.</p>
+        <p>원문/문서 텍스트에서 개인정보가 탐지되면 마스킹 또는 외부 링크 치환을 우선 적용해 노출을 통제합니다.</p>
+        <p>로그인/권한 확인을 거치지 않으면 내부 raw 파일과 감사를 위한 상세 텍스트는 열람되지 않습니다.</p>
       </div>
     </section>
+    {% include "shared/legal_footer_links.html" %}
   </main>
 </body>
 </html>

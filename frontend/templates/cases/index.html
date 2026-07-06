@@ -3,36 +3,30 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>회생·파산 공고 | Court Auction</title>
+  <title>회생파산 목록 | Court Auction</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-50 text-zinc-950">
+  {% include "shared/review_banner.html" %}
+  {% include "shared/public_nav.html" %}
   <main class="mx-auto max-w-7xl px-4 py-6">
-    <header class="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-      <div>
-        <p class="text-sm font-black text-emerald-700">Recovery and Bankruptcy Notices</p>
-        <h1 class="mt-1 text-2xl font-black">회생·파산 공고</h1>
-        <p class="mt-2 text-sm text-zinc-600">공개 가능한 기본 공고 정보만 제공합니다. AI 분석과 내부 원문 파일은 로그인 후 확인합니다.</p>
-      </div>
-      <div class="flex flex-wrap gap-2 text-sm font-bold">
-        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/onbid">온비드 공매</a>
-        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/cases">회생·파산</a>
-        {% if current_user %}
-          <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/user">내 분석 화면</a>
-        {% else %}
-          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/login?next=/cases">로그인</a>
-        {% endif %}
-      </div>
+    {% include "shared/breadcrumbs.html" %}
+    <header class="mb-5">
+      <p class="text-sm font-black text-emerald-700">회생파산 공개 목록</p>
+      <h1 class="mt-1 text-2xl font-black">회생파산 목록</h1>
+      <p class="mt-2 text-sm text-zinc-600">로그인 사용자에게는 AI 분석 결과, 관심/메모 기능이 추가로 제공됩니다.</p>
     </header>
 
-    <form class="mb-4 grid gap-2 rounded-md border border-zinc-200 bg-white p-4 md:grid-cols-[1fr_160px_auto]" action="/cases">
-      <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="q" value="{{ filters.q }}" placeholder="사건번호, 제목, 소재지 검색">
+    <form class="mb-4 grid gap-2 rounded-md border border-zinc-200 bg-white p-4 md:grid-cols-[1fr_180px_auto]" action="/cases" data-nav-scope="local-filter" data-active-section="{{ active_section|default('') }}" data-active-category="{{ active_category|default('') }}">
       <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="category">
-        <option value="ALL" {% if filters.category == 'ALL' %}selected{% endif %}>분류 전체</option>
+        <option value="ALL" {% if filters.category == 'ALL' or filters.category == '' %}selected{% endif %}>전체</option>
         <option value="부동산" {% if filters.category == '부동산' %}selected{% endif %}>부동산</option>
         <option value="동산" {% if filters.category == '동산' %}selected{% endif %}>동산</option>
       </select>
-      <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">검색</button>
+      <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">조회</button>
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold text-zinc-800" href="/cases">초기화</a>
+      <input type="hidden" name="page" value="">
+      <input type="hidden" name="q" value="{{ filters.q }}">
     </form>
 
     <section class="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm">
@@ -46,35 +40,35 @@
                   <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-xs font-black text-white">{{ item.case_number }}</span>
                   <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">{{ item.main_category }}</span>
                   <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">{{ item.d_day.label }}</span>
-                  {% if item.has_login_analysis %}<span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">AI 분석 있음</span>{% endif %}
+                  {% if item.has_login_analysis %}<span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">로그인 후 분석 확인</span>{% endif %}
                 </div>
                 <h2 class="mt-2 font-black"><a href="/cases/{{ item.id }}">{{ item.title }}</a></h2>
                 <p class="mt-2 text-sm text-zinc-600">{{ item.sub_category }} / {{ item.address }}</p>
-                <p class="mt-2 text-sm text-zinc-500">공고 {{ item.notice_date }} / 마감 {{ item.expire_date }}</p>
+                <p class="mt-2 text-sm text-zinc-500">공고일 {{ item.notice_date }} / 만료일 {{ item.expire_date }}</p>
               </div>
               <div class="flex flex-wrap gap-2">
                 <a class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" href="/cases/{{ item.id }}">상세</a>
                 {% if item.external_url %}
-                  <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="{{ item.external_url }}" target="_blank" rel="noopener noreferrer">외부 원문</a>
+                  <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="{{ item.external_url }}" target="_blank" rel="noopener noreferrer">원문 보기</a>
                 {% endif %}
               </div>
             </div>
           </article>
         {% else %}
-          <div class="p-8 text-center text-zinc-500">공개할 공고가 없습니다.</div>
+          <div class="p-8 text-center text-zinc-500">조회 결과가 없습니다.</div>
         {% endfor %}
       </div>
     </section>
 
-    <nav class="mt-4 flex flex-wrap justify-center gap-2 text-sm font-bold">
+    <nav class="mt-4 flex flex-wrap justify-center gap-2 text-sm font-bold" data-nav-scope="local-filter">
       {% if pagination.has_prev %}
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/cases?page={{ pagination.prev_page }}&q={{ filters.q }}&category={{ filters.category }}">이전</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="{{ pagination.prev_href }}">이전</a>
       {% endif %}
-      {% for p in pagination.pages %}
-        <a class="rounded-md px-3 py-2 {% if p == pagination.page %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white{% endif %}" href="/cases?page={{ p }}&q={{ filters.q }}&category={{ filters.category }}">{{ p }}</a>
+      {% for page_link in pagination.page_links %}
+        <a class="rounded-md px-3 py-2 {% if page_link.page == pagination.page %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white{% endif %}" href="{{ page_link.href }}">{{ page_link.page }}</a>
       {% endfor %}
       {% if pagination.has_next %}
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/cases?page={{ pagination.next_page }}&q={{ filters.q }}&category={{ filters.category }}">다음</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="{{ pagination.next_href }}">다음</a>
       {% endif %}
     </nav>
     {% include "shared/ad_slot.html" %}

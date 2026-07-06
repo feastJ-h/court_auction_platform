@@ -7,6 +7,8 @@
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-100 text-zinc-950">
+  {% include "shared/review_banner.html" %}
+  {% include "shared/public_nav.html" %}
   {% macro run_table(runs, empty_message, head_class='bg-zinc-50') %}
     <div class="overflow-x-auto">
       <table class="min-w-full divide-y divide-zinc-200 text-sm">
@@ -54,6 +56,8 @@
   {% endmacro %}
 
   <main class="mx-auto max-w-7xl px-5 py-8">
+    {% include "shared/breadcrumbs.html" %}
+    {% include "shared/admin_nav.html" %}
     <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
       <div>
         <p class="text-sm font-semibold text-emerald-700">Admin Console</p>
@@ -112,10 +116,10 @@
             <p class="mt-2 text-sm text-emerald-900">온비드는 데이터량이 많으므로 더 자주 수집하고, 공고 상세와 공고 물건 연결은 별도 흐름으로 관찰합니다.</p>
           </div>
           <div class="flex flex-wrap gap-2">
-            <button class="onbid-sync-button rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=all" type="button">샘플 물건</button>
-            <button class="onbid-sync-button rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=notice&include_notice_details=true&include_notice_items=true" type="button">샘플 공고</button>
-            <button class="onbid-sync-button rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=20&max_pages=1&api_kind=all" type="button">실제 API</button>
-            <button class="onbid-sync-button rounded-md bg-slate-700 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=20&max_pages=1&api_kind=national_property" type="button">국유일반재산</button>
+            <button class="onbid-sync-button rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=all&min_date=2025-01-01" type="button">샘플 물건</button>
+            <button class="onbid-sync-button rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=notice&include_notice_details=true&include_notice_items=true&min_date=2025-01-01" type="button">샘플 공고</button>
+            <button class="onbid-sync-button rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=20&max_pages=1&api_kind=all&min_date=2025-01-01" type="button">실제 API</button>
+            <button class="onbid-sync-button rounded-md bg-slate-700 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=20&max_pages=1&api_kind=national_property&min_date=2025-01-01" type="button">국유일반재산</button>
           </div>
         </div>
         <div class="mt-4 grid gap-3 md:grid-cols-4">
@@ -187,6 +191,24 @@
           <p class="text-xs font-bold text-zinc-500">최근 실행</p>
           <p class="mt-2 text-3xl font-black">{{ onbid_metrics.runs.recent_total }}</p>
           <p class="mt-1 text-xs text-zinc-500">성공 {{ onbid_metrics.runs.recent_success }} / 실패 {{ onbid_metrics.runs.recent_failed }}</p>
+        </div>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-4" data-onbid-freshness-audit="true">
+        <div class="rounded-md border border-emerald-200 bg-emerald-50 p-4">
+          <p class="text-xs font-bold text-emerald-700">Fresh public</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.freshness.fresh }}</p>
+        </div>
+        <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
+          <p class="text-xs font-bold text-amber-700">Stale hidden</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.freshness.stale }}</p>
+        </div>
+        <div class="rounded-md border border-rose-200 bg-rose-50 p-4">
+          <p class="text-xs font-bold text-rose-700">Unknown-date hidden</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.freshness.unknown_date }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">Public category total</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.public_categories.all }}</p>
         </div>
       </div>
       <div class="mt-4 grid gap-3 md:grid-cols-4">

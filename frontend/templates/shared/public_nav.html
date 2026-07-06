@@ -1,0 +1,15 @@
+﻿<nav class="border-b border-zinc-200 bg-white" data-active-section="{{ active_section|default('') }}" data-active-subsection="{{ active_subsection|default('') }}" data-active-category="{{ active_category|default('') }}" data-nav-scope="global">
+  <div class="mx-auto flex max-w-7xl flex-wrap items-center gap-2 px-4 py-3 text-sm font-bold">
+    <a class="rounded-md px-3 py-2 {% if active_section == 'home' %}bg-zinc-950 text-white{% else %}text-zinc-800 hover:bg-zinc-100{% endif %}" href="/" {% if active_section == 'home' %}aria-current="page"{% endif %}>홈</a>
+    <a class="rounded-md px-3 py-2 {% if active_section == 'onbid' %}bg-zinc-950 text-white{% else %}text-zinc-800 hover:bg-zinc-100{% endif %}" href="/onbid" {% if active_section == 'onbid' %}aria-current="page"{% endif %}>온비드</a>
+    <a class="rounded-md px-3 py-2 {% if active_section == 'cases' %}bg-zinc-950 text-white{% else %}text-zinc-800 hover:bg-zinc-100{% endif %}" href="/cases" {% if active_section == 'cases' %}aria-current="page"{% endif %}>회생파산</a>
+    {% if current_user %}
+      <a class="rounded-md px-3 py-2 {% if active_section == 'my' %}bg-zinc-950 text-white{% else %}text-zinc-800 hover:bg-zinc-100{% endif %}" href="/my/onbid/favorites" {% if active_section == 'my' %}aria-current="page"{% endif %}>내 목록</a>
+      {% if current_user.role == 'admin' %}
+        <a class="rounded-md px-3 py-2 {% if active_section == 'admin' %}bg-zinc-950 text-white{% else %}text-zinc-800 hover:bg-zinc-100{% endif %}" href="/admin" {% if active_section == 'admin' %}aria-current="page"{% endif %}>관리자</a>
+      {% endif %}
+    {% else %}
+      <a class="rounded-md px-3 py-2 {% if active_section == 'auth' %}bg-zinc-950 text-white{% else %}text-zinc-800 hover:bg-zinc-100{% endif %}" href="/login" {% if active_section == 'auth' %}aria-current="page"{% endif %}>로그인</a>
+    {% endif %}
+  </div>
+</nav>

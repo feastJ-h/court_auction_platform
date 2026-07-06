@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>온비드 공매 | Court Auction</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-950">
+  <main class="mx-auto max-w-7xl px-4 py-6">
+    <header class="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-black text-emerald-700">ONBID Public Auction</p>
+        <h1 class="mt-1 text-2xl font-black">온비드 공매 정보</h1>
+        <p class="mt-2 text-sm text-zinc-600">부동산과 동산 공매 물건 정보를 모아보고, 입찰 일정과 물건 세부 정보를 확인합니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/auctions">온비드 공매</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/user">회생·파산</a>
+        {% if current_user.role == 'admin' %}
+          <a class="rounded-md border border-indigo-300 bg-indigo-50 px-4 py-2 text-indigo-800" href="/admin/collection">수집 관리</a>
+        {% endif %}
+      </div>
+    </header>
+
+    <form class="mb-4 grid gap-2 rounded-md border border-zinc-200 bg-white p-4 md:grid-cols-[1fr_180px_150px_auto]">
+      <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="keyword" value="{{ filters.keyword }}" placeholder="물건명, 주소, 물건번호 검색">
+      <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="asset_type">
+        <option value="ALL" {% if filters.asset_type == 'ALL' %}selected{% endif %}>재산 전체</option>
+        <option value="부동산" {% if filters.asset_type == '부동산' %}selected{% endif %}>부동산</option>
+        <option value="동산" {% if filters.asset_type == '동산' %}selected{% endif %}>동산</option>
+      </select>
+      <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="status">
+        <option value="ALL" {% if filters.status == 'ALL' %}selected{% endif %}>상태 전체</option>
+        {% for status in ['입찰예정', '입찰중', '유찰', '낙찰', '취소'] %}
+          <option value="{{ status }}" {% if filters.status == status %}selected{% endif %}>{{ status }}</option>
+        {% endfor %}
+      </select>
+      <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">검색</button>
+    </form>
+
+    {% if current_user.role == 'admin' %}
+      <section class="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div>
+            <p class="font-black text-blue-950">온비드 API 확장 수집</p>
+            <p class="mt-1 text-sm text-blue-800">부동산 목록, 부동산 상세, 동산 목록 흐름을 샘플 데이터로 먼저 검증합니다.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="onbid-sync-button rounded-md bg-blue-700 px-4 py-2 text-sm font-black text-white" data-api-kind="real_estate" data-include-details="true" type="button">부동산+상세</button>
+            <button class="onbid-sync-button rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" data-api-kind="movable" data-include-details="false" type="button">동산</button>
+            <button class="onbid-sync-button rounded-md bg-zinc-900 px-4 py-2 text-sm font-black text-white" data-api-kind="all" data-include-details="true" type="button">전체</button>
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm">
+      <div class="border-b border-zinc-200 p-4 text-sm font-bold text-zinc-600">총 {{ total_count }}건</div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-zinc-200 text-sm">
+          <thead class="bg-zinc-50 text-left text-xs font-black uppercase text-zinc-500">
+            <tr>
+              <th class="px-4 py-3">상태</th>
+              <th class="px-4 py-3">물건명</th>
+              <th class="px-4 py-3">소재지</th>
+              <th class="px-4 py-3">감정가</th>
+              <th class="px-4 py-3">최저가</th>
+              <th class="px-4 py-3">저감률</th>
+              <th class="px-4 py-3">입찰마감</th>
+              <th class="px-4 py-3">공고기관</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-100">
+            {% for item in items %}
+              <tr class="hover:bg-zinc-50">
+                <td class="px-4 py-3"><span class="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-black">{{ item.status }}</span></td>
+                <td class="px-4 py-3">
+                  <a class="font-black text-zinc-950 hover:text-emerald-700" href="/auctions/{{ item.id }}">{{ item.item_name }}</a>
+                  <p class="mt-1 font-mono text-xs text-zinc-500">{{ item.cltr_mng_no }}</p>
+                  <p class="mt-1 font-mono text-xs text-zinc-500">PBCT {{ item.pbct_no or item.pbct_cdtn_no }}{% if item.pbct_nsq %} / round {{ item.pbct_nsq }}{% endif %}</p>
+                </td>
+                <td class="max-w-xs px-4 py-3 text-zinc-600">{{ item.address }}</td>
+                <td class="px-4 py-3 font-bold">{{ "{:,}".format(item.appraisal_price) }}</td>
+                <td class="px-4 py-3 font-bold">{{ "{:,}".format(item.minimum_bid_price) }}</td>
+                <td class="px-4 py-3 font-black text-blue-700">{{ item.discount_rate }}%</td>
+                <td class="px-4 py-3"><span class="rounded-full px-2.5 py-1 text-xs font-black {% if item.d_day.state == 'urgent' %}bg-rose-600 text-white{% elif item.d_day.state == 'closed' %}bg-zinc-300 text-zinc-700{% else %}bg-blue-100 text-blue-800{% endif %}">{{ item.d_day.label }}</span></td>
+                <td class="px-4 py-3 text-zinc-600">{{ item.agency_name or '-' }}</td>
+              </tr>
+            {% else %}
+              <tr><td class="px-4 py-8 text-center text-zinc-500" colspan="8">공매 데이터가 없습니다. 관리자 계정으로 샘플 수집을 먼저 실행하세요.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <nav class="mt-4 flex flex-wrap justify-center gap-2 text-sm font-bold">
+      {% if pagination.has_prev %}
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/auctions?page={{ pagination.prev_page }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&keyword={{ filters.keyword }}">이전</a>
+      {% endif %}
+      {% for p in pagination.pages %}
+        <a class="rounded-md px-3 py-2 {% if p == pagination.page %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white{% endif %}" href="/auctions?page={{ p }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&keyword={{ filters.keyword }}">{{ p }}</a>
+      {% endfor %}
+      {% if pagination.has_next %}
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/auctions?page={{ pagination.next_page }}&status={{ filters.status }}&asset_type={{ filters.asset_type }}&linked={{ filters.linked }}&keyword={{ filters.keyword }}">다음</a>
+      {% endif %}
+    </nav>
+  </main>
+
+  <script>
+    const syncButtons = document.querySelectorAll(".onbid-sync-button");
+    syncButtons.forEach((syncButton) => {
+      syncButton.addEventListener("click", async () => {
+        const originalText = syncButton.textContent;
+        syncButtons.forEach((button) => button.disabled = true);
+        syncButton.textContent = "수집 중";
+        const apiKind = syncButton.dataset.apiKind;
+        const includeDetails = syncButton.dataset.includeDetails;
+        try {
+          const response = await fetch(`/api/admin/auctions/onbid/sync?sample=true&limit=20&api_kind=${apiKind}&include_details=${includeDetails}`, { method: "POST" });
+          if (!response.ok) throw new Error("sync failed");
+          location.reload();
+        } catch {
+          syncButtons.forEach((button) => button.disabled = false);
+          syncButton.textContent = originalText;
+          alert("온비드 샘플 수집에 실패했습니다.");
+        }
+      });
+    });
+  </script>
+</body>
+</html>

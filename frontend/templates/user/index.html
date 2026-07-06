@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>회생·파산 자산 분석 | Court Auction</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-950">
+  <header class="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
+    <nav class="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 md:flex-row md:items-center md:justify-between">
+      <div>
+        <p class="text-xs font-black uppercase tracking-wide text-emerald-700">Court Asset Intelligence</p>
+        <h1 class="text-xl font-black md:text-2xl">회생·파산 자산 분석</h1>
+        <p class="mt-1 text-xs font-bold text-zinc-500">{{ current_user.display_name }}님 검토 중</p>
+      </div>
+      <div class="flex gap-2 overflow-x-auto pb-1 text-sm font-bold md:flex-wrap md:justify-end md:overflow-visible md:pb-0">
+        <a class="shrink-0 rounded-md bg-zinc-950 px-3 py-2 text-white" href="/user">회생·파산</a>
+        <a class="shrink-0 rounded-md border border-zinc-300 px-3 py-2 text-zinc-800" href="/auctions">온비드 공매</a>
+        <a class="shrink-0 rounded-md border border-zinc-300 px-3 py-2 text-zinc-800" href="/user/my">내 보관함</a>
+        <a class="shrink-0 rounded-md border border-zinc-300 px-3 py-2 text-zinc-800" href="/user/settings">내 설정</a>
+        {% if current_user.role == 'admin' %}
+          <a class="shrink-0 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-indigo-800" href="/admin">Admin</a>
+        {% endif %}
+        <a class="shrink-0 rounded-md border border-zinc-300 px-3 py-2 text-zinc-800" href="/logout">로그아웃</a>
+      </div>
+    </nav>
+  </header>
+
+  <main class="mx-auto max-w-7xl px-4 py-5 md:py-6">
+    <section class="mb-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-center">
+      <div>
+        <h2 class="text-lg font-black">회생·파산 검토 물건</h2>
+        <p class="mt-1 text-sm text-zinc-600">AI 분석과 원문 검토가 필요한 사건 중심으로 빠르게 훑을 수 있게 정리했습니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-800" href="/user/bookmarks">관심</a>
+        <a class="rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-blue-800" href="/user/watching">지켜보기</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-700" href="/user/passed">패스</a>
+      </div>
+    </section>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-[1fr_auto] md:items-end">
+      <div class="grid grid-cols-3 gap-3 rounded-md border border-zinc-200 bg-white p-4">
+        <div><p class="text-xs font-semibold text-zinc-500">전체 보관</p><p class="mt-1 text-2xl font-black">{{ total_count }}</p></div>
+        <div><p class="text-xs font-semibold text-zinc-500">현재 부동산</p><p class="mt-1 text-2xl font-black">{{ category_counts.get('부동산', 0) }}</p></div>
+        <div><p class="text-xs font-semibold text-zinc-500">현재 동산</p><p class="mt-1 text-2xl font-black">{{ category_counts.get('동산', 0) }}</p></div>
+      </div>
+      <div class="grid grid-cols-3 gap-2 md:w-80" aria-label="카테고리 필터">
+        <button class="category-tab rounded-md bg-zinc-950 px-3 py-2 text-sm font-black text-white" data-filter="전체">전체</button>
+        <button class="category-tab rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-black" data-filter="부동산">부동산</button>
+        <button class="category-tab rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-black" data-filter="동산">동산</button>
+      </div>
+    </section>
+
+    <section class="grid gap-5 md:grid-cols-[390px_1fr]">
+      <aside class="space-y-3">
+        <div id="asset-list" class="space-y-3">
+          {% for event in events %}
+            {% set analysis = event.analyses[0] if event.analyses else None %}
+            <article class="asset-card" data-event-id="{{ event.id }}" data-category="{{ event.asset.main_category }}">
+              <button
+                type="button"
+                class="asset-row relative w-full rounded-md border border-zinc-200 bg-white p-4 text-left shadow-sm transition hover:border-zinc-400"
+                data-event-id="{{ event.id }}"
+                data-category="{{ event.asset.main_category }}"
+              >
+                <span class="dday-badge absolute right-3 top-3 rounded-full px-2.5 py-1 text-xs font-black" data-state="{{ event.d_day_state }}">{{ event.d_day_str }}</span>
+                <div class="pr-20">
+                  <p class="font-mono text-xs font-bold text-zinc-500">{{ event.case_number }}</p>
+                  <h2 class="mt-1 line-clamp-2 font-black leading-snug">{{ event.title }}</h2>
+                </div>
+                <div class="mt-3 flex flex-wrap items-center gap-2">
+                  <span class="rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800">{{ event.asset.main_category }}</span>
+                  <span class="rounded-full bg-zinc-100 px-2 py-1 text-xs font-bold text-zinc-700">{{ event.asset.sub_category }}</span>
+                  <span class="rounded-full bg-blue-100 px-2 py-1 text-xs font-bold text-blue-800">판단 {{ event.marketability.grade }}</span>
+                </div>
+                <p class="mt-3 truncate text-sm text-zinc-600">{{ event.asset.address }}</p>
+                <div class="mt-3 grid grid-cols-2 gap-2 text-xs text-zinc-500">
+                  <span>입찰 {{ analysis.bidding_date if analysis else '미정' }}</span>
+                  <span>최저가 {{ analysis.min_price if analysis else '0' }}</span>
+                </div>
+              </button>
+              <div class="mt-2 grid grid-cols-3 gap-2">
+                <form action="/user/events/{{ event.id }}/bookmark" method="post">
+                  <button class="w-full rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 hover:border-emerald-500" type="submit">관심</button>
+                </form>
+                <form action="/user/events/{{ event.id }}/watch" method="post">
+                  <button class="w-full rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-800 hover:border-blue-500" type="submit">지켜보기</button>
+                </form>
+                <form action="/user/events/{{ event.id }}/pass" method="post">
+                  <button class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs font-black text-zinc-700 hover:border-zinc-500" type="submit">패스</button>
+                </form>
+              </div>
+              <div class="mobile-detail hidden border-x border-b border-zinc-200 bg-white p-4 md:hidden" data-event-id="{{ event.id }}"></div>
+            </article>
+          {% else %}
+            <div class="rounded-md border border-dashed border-zinc-300 bg-white p-6 text-center text-zinc-500">
+              아직 수집된 데이터가 없습니다. 파이프라인을 먼저 실행하세요.
+            </div>
+          {% endfor %}
+        </div>
+
+        <nav class="flex flex-wrap items-center justify-center gap-2 pt-2 text-sm font-bold" aria-label="페이지 이동">
+          {% if pagination.has_prev %}
+            <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/user?page={{ pagination.prev_page }}">이전</a>
+          {% else %}
+            <span class="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-zinc-400">이전</span>
+          {% endif %}
+          {% for page_number in pagination.pages %}
+            {% if page_number == pagination.page %}
+              <span class="rounded-md bg-zinc-950 px-3 py-2 text-white">{{ page_number }}</span>
+            {% else %}
+              <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/user?page={{ page_number }}">{{ page_number }}</a>
+            {% endif %}
+          {% endfor %}
+          {% if pagination.has_next %}
+            <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="/user?page={{ pagination.next_page }}">다음</a>
+          {% else %}
+            <span class="rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-zinc-400">다음</span>
+          {% endif %}
+        </nav>
+      </aside>
+
+      <section class="hidden min-h-[720px] rounded-md border border-zinc-200 bg-white shadow-sm md:block">
+        <div id="empty-state" class="flex h-full min-h-[720px] items-center justify-center p-10 text-center text-zinc-500">
+          좌측 리스트에서 물건을 선택하면 사건 정보와 AI 분석이 표시됩니다.
+        </div>
+        <div id="desktop-detail" class="hidden"></div>
+      </section>
+    </section>
+  </main>
+
+  <script id="event-payload" type="application/json">{{ event_payload|tojson }}</script>
+  <script src="/static/app.js?v=role-ui-20260705"></script>
+</body>
+</html>

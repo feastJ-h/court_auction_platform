@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>패스한 물건 | Court Auction</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-950">
+  <main class="mx-auto max-w-5xl px-4 py-8">
+    <header class="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-black text-emerald-700">{{ current_user.display_name }}님의 제외 목록</p>
+        <h1 class="mt-1 text-2xl font-black">패스한 물건</h1>
+        <p class="mt-2 text-sm text-zinc-600">실수로 제외한 물건은 다시 검토 목록으로 복구할 수 있습니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/user">회생·파산</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/auctions">온비드 공매</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/user/bookmarks">관심</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/user/watching">지켜보기</a>
+        <a class="rounded-md border border-zinc-500 bg-zinc-100 px-4 py-2 text-zinc-900" href="/user/passed">패스</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/user/settings">내 설정</a>
+      </div>
+    </header>
+
+    <section class="space-y-3">
+      {% for event in events %}
+        {% set analysis = event.analyses[0] if event.analyses else None %}
+        <article class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+          <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <p class="font-mono text-xs font-bold text-zinc-500">{{ event.case_number }}</p>
+              <h2 class="mt-1 font-black">{{ event.title }}</h2>
+              <p class="mt-2 text-sm text-zinc-600">{{ event.asset.main_category }} / {{ event.asset.sub_category }} / {{ event.asset.address }}</p>
+              <p class="mt-2 text-sm text-zinc-500">입찰 {{ analysis.bidding_date if analysis else '미정' }} / {{ event.notice_date }}</p>
+            </div>
+            <form action="/user/events/{{ event.id }}/unpass" method="post">
+              <button class="rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" type="submit">다시 보기</button>
+            </form>
+          </div>
+        </article>
+      {% else %}
+        <div class="rounded-md border border-dashed border-zinc-300 bg-white p-8 text-center text-zinc-500">패스한 물건이 없습니다.</div>
+      {% endfor %}
+    </section>
+  </main>
+</body>
+</html>

@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>분석 관리 | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  <main class="mx-auto max-w-7xl px-5 py-8">
+    <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-indigo-700">Admin Console</p>
+        <h1 class="mt-1 text-3xl font-black">분석 관리</h1>
+        <p class="mt-2 text-sm text-zinc-600">기본 분석, 상세 분석, OCR 완료 후 분석 대기 상태를 봅니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/admin">통합</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2" href="/admin/reviews">검수</a>
+      </div>
+    </header>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-5">
+      {% for status, label in [('PENDING','대기'),('RUNNING','진행'),('SUCCEEDED','완료'),('FAILED','실패')] %}
+        <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">{{ label }}</p><p class="mt-2 text-3xl font-black">{{ job_counts.get(status, 0) }}</p></div>
+      {% endfor %}
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">검수 누적</p><p class="mt-2 text-3xl font-black">{{ analysis_review_summary.total_reviews }}</p></div>
+    </section>
+
+    <section class="rounded-md border border-zinc-200 bg-white shadow-sm">
+      <div class="border-b border-zinc-200 p-5"><h2 class="text-xl font-black">분석 상태 목록</h2></div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-zinc-200 text-sm">
+          <thead class="bg-zinc-50 text-left text-xs font-black uppercase text-zinc-500">
+            <tr><th class="px-4 py-3">사건번호</th><th class="px-4 py-3">제목</th><th class="px-4 py-3">Gemini</th><th class="px-4 py-3">ChatGPT/Codex</th><th class="px-4 py-3">상세 Job</th><th class="px-4 py-3">OCR</th></tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-100">
+            {% for event in events[:120] %}
+              <tr>
+                <td class="px-4 py-3 font-mono font-bold">{{ event.case_number }}</td>
+                <td class="px-4 py-3 font-black">{{ event.title }}</td>
+                <td class="px-4 py-3">{{ event.gemini_status }}</td>
+                <td class="px-4 py-3">{{ event.chatgpt_status }}</td>
+                <td class="px-4 py-3">{{ event.latest_deep_job.status if event.latest_deep_job else '요청 없음' }}</td>
+                <td class="px-4 py-3">{{ event.latest_ocr_job.status if event.latest_ocr_job else event.parse_status }}</td>
+              </tr>
+            {% else %}
+              <tr><td class="px-4 py-8 text-center text-zinc-500" colspan="6">분석 대상이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

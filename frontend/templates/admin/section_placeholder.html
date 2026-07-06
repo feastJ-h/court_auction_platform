@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ section_title }} | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  <main class="mx-auto max-w-5xl px-5 py-8">
+    <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-indigo-700">Admin Console</p>
+        <h1 class="mt-1 text-3xl font-black">{{ section_title }}</h1>
+        <p class="mt-2 text-sm text-zinc-600">{{ section_description }}</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/admin">통합 대시보드</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/user">사용자 화면</a>
+      </div>
+    </header>
+
+    <nav class="mb-5 flex flex-wrap gap-2 text-sm font-bold">
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="/admin/assets">물건</a>
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="/admin/analysis">분석</a>
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="/admin/collection">수집</a>
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="/admin/users">사용자</a>
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="/admin/settings">설정</a>
+      <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="/admin/reviews">검수</a>
+    </nav>
+
+    <section class="rounded-md border border-zinc-200 bg-white p-6 shadow-sm">
+      <h2 class="text-lg font-black">이번 스프린트 준비 완료</h2>
+      <p class="mt-2 text-sm leading-6 text-zinc-600">현재 기능은 통합 대시보드에 남겨두고, 다음 관리자 UI 분리 루프에서 이 메뉴로 세부 화면을 이관합니다.</p>
+    </section>
+  </main>
+</body>
+</html>

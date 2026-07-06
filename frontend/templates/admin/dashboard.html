@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>관리자 대시보드 | Court Auction</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  <main class="mx-auto max-w-7xl px-5 py-8">
+    <header class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-indigo-700">Admin Console</p>
+        <h1 class="mt-1 text-3xl font-black tracking-tight">회생·파산 분석 운영</h1>
+        <p class="mt-2 text-sm text-zinc-600">AI 분석과 워커 상태는 회생·파산 카테고리 중심으로 운영합니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/user" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">사용자 화면</a>
+        <a href="/admin/assets" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">물건</a>
+        <a href="/admin/analysis" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">분석</a>
+        <a href="/admin/collection" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">수집</a>
+        <a href="/admin/users" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">사용자 관리</a>
+        <a href="/admin/settings" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">설정</a>
+        <a href="/admin/reviews" class="rounded-md bg-white px-4 py-2 text-sm font-bold text-zinc-900 shadow-sm ring-1 ring-zinc-200">검수</a>
+        <a href="/admin" class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-bold text-white">새로고침</a>
+      </div>
+    </header>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-5">
+      <div class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+        <p class="text-xs font-bold text-zinc-500">전체 물건</p>
+        <p class="mt-2 text-3xl font-black">{{ event_count }}</p>
+      </div>
+      {% for status, label in [('PENDING', '대기'), ('RUNNING', '진행'), ('SUCCEEDED', '완료'), ('FAILED', '실패')] %}
+        <div class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+          <p class="text-xs font-bold text-zinc-500">{{ label }}</p>
+          <p class="mt-2 text-3xl font-black">{{ job_counts.get(status, 0) }}</p>
+        </div>
+      {% endfor %}
+    </section>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-4">
+      <div class="rounded-md border border-violet-200 bg-violet-50 p-4">
+        <p class="text-xs font-bold text-violet-700">Gemini 기본</p>
+        <p class="mt-2 text-2xl font-black text-violet-950">{{ model_result_counts.get('gemini', {}).get('basic_succeeded', 0) + model_result_counts.get('gemini', {}).get('basic_cached', 0) }}</p>
+      </div>
+      <div class="rounded-md border border-sky-200 bg-sky-50 p-4">
+        <p class="text-xs font-bold text-sky-700">ChatGPT 기본</p>
+        <p class="mt-2 text-2xl font-black text-sky-950">{{ model_result_counts.get('chatgpt', {}).get('basic_succeeded', 0) + model_result_counts.get('chatgpt', {}).get('basic_cached', 0) }}</p>
+      </div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4">
+        <p class="text-xs font-bold text-zinc-600">Codex 상세</p>
+        <p class="mt-2 text-2xl font-black">{{ model_result_counts.get('codex_app_server', {}).get('deep_succeeded', 0) + model_result_counts.get('codex_app_server', {}).get('deep_cached', 0) + model_result_counts.get('codex_cli', {}).get('deep_succeeded', 0) + model_result_counts.get('codex_cli', {}).get('deep_cached', 0) }}</p>
+      </div>
+      <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
+        <p class="text-xs font-bold text-amber-700">모델 의견 차이</p>
+        <p class="mt-2 text-2xl font-black text-amber-950">{{ events|selectattr('model_disagreement')|list|length }}</p>
+      </div>
+    </section>
+
+    <section class="mb-5 rounded-md border p-5 shadow-sm
+      {% if local_analysis_status.state == 'needs_app' %}border-amber-300 bg-amber-50
+      {% elif local_analysis_status.state == 'running' %}border-emerald-300 bg-emerald-50
+      {% elif local_analysis_status.state == 'stale' %}border-orange-300 bg-orange-50
+      {% elif local_analysis_status.state == 'failed' %}border-rose-300 bg-rose-50
+      {% elif local_analysis_status.state == 'ready' %}border-blue-300 bg-blue-50
+      {% else %}border-zinc-200 bg-white{% endif %}">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p class="text-sm font-black text-zinc-600">Local Analysis App</p>
+          <h2 class="mt-1 text-xl font-black">{{ local_analysis_status.message }}</h2>
+          <p class="mt-2 text-sm text-zinc-600">
+            {{ local_analysis_status.endpoint }} /
+            app-server {{ 'ON' if local_analysis_status.app_server_online else 'OFF' }} /
+            대기 {{ local_analysis_status.pending_jobs }} /
+            진행 {{ local_analysis_status.running_jobs }} /
+            실패 {{ local_analysis_status.failed_jobs }} /
+            워커 {{ local_analysis_status.active_worker_count }} / 멈춤 가능 {{ local_analysis_status.stale_worker_count }}
+          </p>
+          {% if local_analysis_status.latest_worker %}
+            <p class="mt-2 text-xs text-zinc-600">
+              마지막 워커:
+              {{ local_analysis_status.latest_worker.worker_type }} /
+              {{ local_analysis_status.latest_worker.status }} /
+              job #{{ local_analysis_status.latest_worker.current_job_id or '-' }} /
+              {{ local_analysis_status.latest_worker.last_seen_at }}
+            </p>
+            <p class="mt-1 text-xs text-zinc-600">{{ local_analysis_status.latest_worker.status_message }}</p>
+          {% else %}
+            <p class="mt-2 text-xs text-zinc-500">아직 기록된 워커 heartbeat가 없습니다. 로컬 분석 앱을 한 번 실행하면 이곳에 표시됩니다.</p>
+          {% endif %}
+        </div>
+        <div class="rounded-md bg-zinc-950 px-4 py-3 font-mono text-xs font-bold text-white">
+          .\run_local_analysis_app.ps1 -Limit 1 -TimeoutSeconds 900
+        </div>
+      </div>
+      {% if local_analysis_status.workers %}
+        <div class="mt-4 grid gap-2 md:grid-cols-2">
+          {% for worker in local_analysis_status.workers[:4] %}
+            <div class="rounded-md border border-black/10 bg-white/70 p-3 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="rounded-full bg-zinc-950 px-2 py-0.5 font-black text-white">{{ worker.status }}</span>
+                {% if worker.stale %}
+                  <span class="rounded-full bg-orange-100 px-2 py-0.5 font-black text-orange-800">멈춤 가능성</span>
+                {% endif %}
+                <span class="font-bold">{{ worker.worker_type }}</span>
+                <span class="text-zinc-500">{{ worker.provider_mode }}</span>
+              </div>
+              <p class="mt-2 break-all font-mono text-zinc-500">{{ worker.worker_id }}</p>
+              <p class="mt-1 text-zinc-600">현재 job: #{{ worker.current_job_id or '-' }} / PID: {{ worker.pid or '-' }}</p>
+              <p class="mt-1 text-zinc-600">{{ worker.status_message }}</p>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="mb-5 rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-indigo-700">Analysis Quality</p>
+          <h2 class="mt-1 text-xl font-black">분석 품질 검수</h2>
+          <p class="mt-2 text-sm text-zinc-600">관리자 검수 누적 {{ analysis_review_summary.total_reviews }}건</p>
+        </div>
+        <div class="grid gap-2 text-xs sm:grid-cols-5">
+          {% for key, label in [('price_score','가격'), ('date_score','날짜'), ('risk_score','리스크'), ('evidence_score','근거'), ('hallucination_score','환각')] %}
+            <div class="rounded-md bg-zinc-50 p-3 text-center">
+              <p class="font-bold text-zinc-500">{{ label }}</p>
+              <p class="mt-1 text-lg font-black">{{ analysis_review_summary.averages.get(key, 0) }}</p>
+            </div>
+          {% endfor %}
+        </div>
+      </div>
+      <p class="mt-3 text-xs text-zinc-500">검수 입력은 API `/api/admin/analysis-results/{analysis_result_id}/reviews`로 저장됩니다. 점수는 0~5 범위로 제한됩니다.</p>
+    </section>
+
+    <section class="mb-5 grid gap-4 lg:grid-cols-2">
+      <div class="rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+        <div class="flex items-end justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-indigo-700">Review History</p>
+            <h2 class="mt-1 text-xl font-black">최근 검수 이력</h2>
+          </div>
+          <span class="rounded-full bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-700">{{ recent_analysis_reviews|length }}건</span>
+        </div>
+        <div class="mt-4 max-h-72 space-y-2 overflow-auto">
+          {% for review in recent_analysis_reviews %}
+            <div class="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="rounded-full bg-zinc-950 px-2 py-0.5 font-black text-white">{{ review.model_provider }}</span>
+                <span class="rounded-full bg-white px-2 py-0.5 font-bold text-zinc-700">{{ review.analysis_type }}</span>
+                <span class="text-zinc-500">event #{{ review.event_id }}</span>
+              </div>
+              <p class="mt-2 font-bold text-zinc-700">
+                가격 {{ review.price_score }} / 날짜 {{ review.date_score }} / 리스크 {{ review.risk_score }} / 근거 {{ review.evidence_score }} / 환각 {{ review.hallucination_score }}
+              </p>
+              {% if review.notes %}
+                <p class="mt-1 line-clamp-2 text-zinc-600">{{ review.notes }}</p>
+              {% endif %}
+              <p class="mt-1 text-zinc-400">{{ review.reviewer }} · {{ review.created_at }}</p>
+            </div>
+          {% else %}
+            <p class="rounded-md border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">아직 검수 이력이 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+        <div class="flex items-end justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-indigo-700">Audit Trail</p>
+            <h2 class="mt-1 text-xl font-black">최근 운영 로그</h2>
+          </div>
+          <span class="rounded-full bg-zinc-100 px-3 py-1 text-xs font-black text-zinc-700">{{ recent_audit_logs|length }}건</span>
+        </div>
+        <div class="mt-4 max-h-72 space-y-2 overflow-auto">
+          {% for log in recent_audit_logs %}
+            <div class="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-xs">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="rounded-full bg-zinc-950 px-2 py-0.5 font-black text-white">{{ log.action }}</span>
+                <span class="text-zinc-500">{{ log.target_type }} #{{ log.target_id }}</span>
+              </div>
+              <p class="mt-2 font-bold text-zinc-700">{{ log.summary }}</p>
+              <p class="mt-1 text-zinc-400">{{ log.actor.username if log.actor else 'system' }} · {{ log.created_at }}</p>
+            </div>
+          {% else %}
+            <p class="rounded-md border border-dashed border-zinc-300 p-4 text-sm text-zinc-500">아직 감사 로그가 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+
+    <section class="mb-5 rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-indigo-700">Analysis Provider</p>
+          <h2 class="mt-1 text-xl font-black">기본 분석 도구</h2>
+          <p class="mt-2 text-sm text-zinc-600">신규 기본 분석은 현재 선택된 도구를 사용합니다.</p>
+        </div>
+        <form action="/admin/analysis-provider" method="post" class="flex flex-wrap items-center gap-3">
+          <select id="analysis_provider" name="analysis_provider" class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold">
+            <option value="chatgpt" {% if current_provider == 'chatgpt' or current_provider == 'openai' %}selected{% endif %}>ChatGPT</option>
+            <option value="gemini" {% if current_provider == 'gemini' %}selected{% endif %}>Gemini</option>
+          </select>
+          <button type="submit" class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-bold text-white">저장</button>
+          <span class="rounded-full px-3 py-1 text-xs font-black {% if chatgpt_ready %}bg-emerald-100 text-emerald-800{% else %}bg-amber-100 text-amber-800{% endif %}">
+            ChatGPT {{ '설정됨' if chatgpt_ready else 'API 키 없음, CLI 상세 분석 사용' }}
+          </span>
+        </form>
+      </div>
+    </section>
+
+    <section class="mb-5 rounded-md border p-5 shadow-sm {% if ocr_engine_status.available %}border-emerald-200 bg-emerald-50{% else %}border-amber-300 bg-amber-50{% endif %}">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-indigo-700">Free OCR Engine</p>
+          <h2 class="mt-1 text-xl font-black">Tesseract OCR {{ '사용 가능' if ocr_engine_status.available else '설치 필요' }}</h2>
+          <p class="mt-2 text-sm text-zinc-700">
+            무료 로컬 OCR 엔진으로 PDF 스캔본을 텍스트화합니다.
+            {% if ocr_engine_status.available %}
+              현재 경로: {{ ocr_engine_status.command }}
+            {% else %}
+              Tesseract 설치 후 `.env`의 `TESSERACT_CMD` 또는 PATH를 설정하세요.
+            {% endif %}
+          </p>
+        </div>
+        <div class="rounded-md bg-white/80 px-4 py-3 font-mono text-xs font-bold text-zinc-800">
+          {% if ocr_engine_status.available %}
+            .\run_ocr_worker.ps1 -Limit 1 -Enqueue
+          {% else %}
+            .\run_ocr_worker.ps1 -Limit 1 -DryRun
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
+    <section class="mb-5 rounded-md border p-5 shadow-sm
+      {% if collection_quality.quality_state == 'warning' %}border-amber-300 bg-amber-50{% else %}border-emerald-200 bg-emerald-50{% endif %}">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-indigo-700">Collection Quality</p>
+          <h2 class="mt-1 text-xl font-black">수집/파일 품질</h2>
+          <p class="mt-2 text-sm text-zinc-700">
+            원본 {{ collection_quality.total_documents }}건 /
+            이벤트 {{ collection_quality.total_events }}건 /
+            증거 {{ collection_quality.evidence_count }}건 /
+            파일 누락 {{ collection_quality.missing_file_count }}건
+          </p>
+          {% if collection_quality.quality_warnings %}
+            <div class="mt-3 flex flex-wrap gap-2">
+              {% for warning in collection_quality.quality_warnings %}
+                <span class="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">{{ warning }}</span>
+              {% endfor %}
+            </div>
+          {% else %}
+            <p class="mt-3 text-sm font-bold text-emerald-800">수집 품질 경고가 없습니다.</p>
+          {% endif %}
+        </div>
+        <div class="grid gap-2 text-xs sm:grid-cols-2 lg:min-w-96">
+          <div class="rounded-md bg-white/80 p-3">
+            <p class="font-black">파싱 상태</p>
+            {% for status, count in collection_quality.parse_status_counts.items() %}
+              <p class="mt-1 text-zinc-700">{{ status }}: {{ count }}</p>
+            {% endfor %}
+          </div>
+          <div class="rounded-md bg-white/80 p-3">
+            <p class="font-black">확장자</p>
+            {% for ext, count in collection_quality.extension_counts.items() %}
+              <p class="mt-1 text-zinc-700">{{ ext }}: {{ count }}</p>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% if collection_quality.missing_files %}
+        <details class="mt-4 rounded-md bg-white/80 p-3 text-sm">
+          <summary class="cursor-pointer font-black">누락 파일 목록</summary>
+          <ul class="mt-3 max-h-48 space-y-2 overflow-auto">
+            {% for item in collection_quality.missing_files %}
+              <li class="break-all rounded-md bg-zinc-50 p-2 font-mono text-xs">#{{ item.raw_doc_id }} {{ item.file_path }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+      {% endif %}
+    </section>
+
+    <section class="mb-5 rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+      <div class="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-indigo-700">Operations Filter</p>
+          <h2 class="mt-1 text-xl font-black">운영 필터</h2>
+          <p class="mt-2 text-sm text-zinc-600">현재 표시 {{ filtered_count }}건 / 전체 {{ event_count }}건</p>
+        </div>
+        <form action="/admin" method="get" class="flex flex-wrap items-center gap-3">
+          <select name="job_status" class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold">
+            {% for value, label in [('ALL','Job 전체'), ('NONE','Job 없음'), ('PENDING','대기'), ('RUNNING','진행'), ('SUCCEEDED','완료'), ('FAILED','실패'), ('CANCELED','취소')] %}
+              <option value="{{ value }}" {% if filters.job_status == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <select name="model" class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold">
+            {% for value, label in [('ALL','모델 전체'), ('gemini','Gemini 있음'), ('chatgpt','ChatGPT/Codex 있음'), ('codex','Codex 상세 있음')] %}
+              <option value="{{ value }}" {% if filters.model == value %}selected{% endif %}>{{ label }}</option>
+            {% endfor %}
+          </select>
+          <select name="parse_status" class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold">
+            <option value="ALL" {% if filters.parse_status == 'ALL' %}selected{% endif %}>파싱 전체</option>
+            {% for status_option in parse_status_options %}
+              <option value="{{ status_option }}" {% if filters.parse_status == status_option %}selected{% endif %}>{{ status_option }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-bold text-white">적용</button>
+          <a href="/admin" class="rounded-md border border-zinc-300 px-4 py-2 text-sm font-bold text-zinc-800">초기화</a>
+        </form>
+      </div>
+    </section>
+
+    {% if failed_events or stale_events %}
+      <section class="mb-5 grid gap-4 lg:grid-cols-2">
+        <div class="rounded-md border border-rose-200 bg-rose-50 p-5">
+          <h2 class="text-lg font-black text-rose-950">실패 Job</h2>
+          <p class="mt-1 text-sm text-rose-800">{{ failed_events|length }}건</p>
+          <div class="mt-4 max-h-64 space-y-2 overflow-auto">
+            {% for event in failed_events[:8] %}
+              {% set job = event.latest_deep_job %}
+              <div class="rounded-md bg-white p-3 text-sm">
+                <p class="font-black">{{ event.case_number }} / job #{{ job.id }}</p>
+                <p class="mt-1 text-xs text-rose-800">{{ job.error_code }} {{ job.error_message[:220] }}</p>
+              </div>
+            {% else %}
+              <p class="text-sm text-rose-800">실패 job이 없습니다.</p>
+            {% endfor %}
+          </div>
+        </div>
+        <div class="rounded-md border border-orange-200 bg-orange-50 p-5">
+          <h2 class="text-lg font-black text-orange-950">오래 멈춘 RUNNING Job</h2>
+          <p class="mt-1 text-sm text-orange-800">{{ stale_events|length }}건</p>
+          <div class="mt-4 max-h-64 space-y-2 overflow-auto">
+            {% for event in stale_events[:8] %}
+              {% set job = event.latest_deep_job %}
+              <div class="rounded-md bg-white p-3 text-sm">
+                <p class="font-black">{{ event.case_number }} / job #{{ job.id }}</p>
+                <p class="mt-1 text-xs text-orange-800">마지막 이벤트: {{ job.last_event_at or job.started_at }}</p>
+              </div>
+            {% else %}
+              <p class="text-sm text-orange-800">멈춤 가능 job이 없습니다.</p>
+            {% endfor %}
+          </div>
+        </div>
+      </section>
+    {% endif %}
+
+    <section class="space-y-4">
+      {% for event in events %}
+        {% set analysis = event.analyses[0] if event.analyses else None %}
+        {% set evidence = event.raw_document.evidence %}
+        {% set job = event.latest_deep_job %}
+        {% set ocr_job = event.latest_ocr_job %}
+        {% set detailed_ready = analysis and analysis.detailed_analysis and analysis.detailed_analysis.strip() %}
+        <article class="rounded-md border border-zinc-200 bg-white shadow-sm">
+          <div class="grid gap-4 border-b border-zinc-200 p-5 lg:grid-cols-[1.2fr_0.8fr_0.9fr]">
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-xs font-black text-white">{{ event.case_number }}</span>
+                <span class="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-bold text-zinc-700">{{ event.status }}</span>
+                <span class="rounded-full px-2.5 py-1 text-xs font-black {% if detailed_ready %}bg-emerald-100 text-emerald-800{% else %}bg-amber-100 text-amber-800{% endif %}">
+                  상세 {{ '완료' if detailed_ready else '미완료' }}
+                </span>
+                <span class="rounded-full px-2.5 py-1 text-xs font-black {% if event.gemini_status == '완료' %}bg-violet-100 text-violet-800{% else %}bg-zinc-100 text-zinc-500{% endif %}">Gemini {{ event.gemini_status }}</span>
+                <span class="rounded-full px-2.5 py-1 text-xs font-black {% if event.chatgpt_status == '완료' %}bg-sky-100 text-sky-800{% else %}bg-zinc-100 text-zinc-500{% endif %}">ChatGPT {{ event.chatgpt_status }}</span>
+                <span class="rounded-full px-2.5 py-1 text-xs font-black {% if event.analysis_readiness.ready %}bg-emerald-100 text-emerald-800{% else %}bg-rose-100 text-rose-800{% endif %}">
+                  {{ '분석 가능' if event.analysis_readiness.ready else '분석 준비 필요' }}
+                </span>
+                {% if event.model_disagreement %}
+                  <span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">모델 의견 차이</span>
+                {% endif %}
+              </div>
+              <h3 class="mt-3 text-lg font-black leading-snug">{{ event.title }}</h3>
+              <p class="mt-2 text-sm leading-6 text-zinc-600">{{ event.asset.main_category }} / {{ event.asset.sub_category }} / {{ event.asset.address }}</p>
+              {% if not event.analysis_readiness.ready %}
+                <p class="mt-2 rounded-md bg-rose-50 px-3 py-2 text-sm font-bold text-rose-800">분석 불가 원인: {{ event.analysis_readiness.reason }}</p>
+              {% endif %}
+            </div>
+            <div class="text-sm leading-7">
+              <p><strong>등록일:</strong> {{ event.notice_date }}</p>
+              <p><strong>만료일:</strong> {{ event.expire_date }}</p>
+              <p><strong>입찰/매각일:</strong> {{ analysis.bidding_date if analysis else '미정' }}</p>
+              <p><strong>기본 엔진:</strong> {{ analysis.analysis_provider if analysis else '없음' }}</p>
+            </div>
+            <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm">
+              <p class="font-black">상세 분석 Job</p>
+              {% if job %}
+                <p class="mt-2"><strong>상태:</strong> {{ job.status }} / {{ job.provider_mode }}</p>
+                <p><strong>실행:</strong> {{ job.execution_mode or '-' }}</p>
+                <p><strong>시도:</strong> {{ job.attempt_count }} / {{ job.max_attempts }}</p>
+                <p><strong>진행:</strong> {{ job.progress_percent }}%</p>
+                <div class="mt-2 h-2 overflow-hidden rounded-full bg-zinc-200">
+                  <div class="h-full bg-indigo-700" style="width: {{ job.progress_percent }}%"></div>
+                </div>
+                <p class="mt-2 text-xs text-zinc-600">{{ job.progress_message or job.result_summary }}</p>
+                {% if job.status in ['PENDING', 'RUNNING'] %}
+                  <button class="cancel-request-button mt-3 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-black text-white" data-job-id="{{ job.id }}" type="button">취소 요청</button>
+                {% endif %}
+                {% if job.status in ['FAILED', 'CANCELED'] %}
+                  <button class="retry-job-button mt-3 rounded-md bg-zinc-950 px-3 py-1.5 text-xs font-black text-white" data-job-id="{{ job.id }}" type="button">재시도</button>
+                {% endif %}
+                <button class="force-analysis-button mt-3 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-black text-zinc-900" data-event-id="{{ event.id }}" type="button">강제 재분석</button>
+              {% else %}
+                <p class="mt-2 text-zinc-500">요청 없음</p>
+                <button class="force-analysis-button mt-3 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-black text-zinc-900" data-event-id="{{ event.id }}" type="button">강제 재분석</button>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="grid gap-4 border-b border-zinc-200 bg-zinc-50 p-5 lg:grid-cols-[1fr_0.8fr]">
+            <form action="/admin/events/{{ event.id }}/metadata" method="post" class="rounded-md border border-zinc-200 bg-white p-4">
+              <p class="text-sm font-black text-zinc-900">메타데이터 보정</p>
+              <div class="mt-3 grid gap-2 md:grid-cols-4">
+                <label class="block">
+                  <span class="text-xs font-bold text-zinc-500">등록일</span>
+                  <input name="notice_date" value="{{ event.notice_date }}" class="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm">
+                </label>
+                <label class="block">
+                  <span class="text-xs font-bold text-zinc-500">만료일</span>
+                  <input name="expire_date" value="{{ event.expire_date }}" class="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm">
+                </label>
+                <label class="block">
+                  <span class="text-xs font-bold text-zinc-500">파싱 상태</span>
+                  <select name="parse_status" class="mt-1 w-full rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm">
+                    {% for status_option in parse_status_options %}
+                      <option value="{{ status_option }}" {% if event.parse_status == status_option %}selected{% endif %}>{{ status_option }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                <label class="block">
+                  <span class="text-xs font-bold text-zinc-500">제목</span>
+                  <input name="title" value="{{ event.title }}" class="mt-1 w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm">
+                </label>
+              </div>
+              <button type="submit" class="mt-3 rounded-md bg-zinc-950 px-4 py-2 text-xs font-black text-white">보정 저장</button>
+            </form>
+
+            <div class="rounded-md border border-zinc-200 bg-white p-4 text-sm">
+              <div class="flex items-start justify-between gap-3">
+                <div>
+                  <p class="font-black text-zinc-900">OCR 큐</p>
+                  <p class="mt-1 text-xs text-zinc-500">OCR_REQUIRED 문서는 무료 Tesseract OCR로 텍스트화합니다.</p>
+                </div>
+                <span class="rounded-full px-2.5 py-1 text-xs font-black {% if event.parse_status == 'OCR_REQUIRED' %}bg-amber-100 text-amber-800{% elif event.parse_status == 'OCR_PARSED' %}bg-emerald-100 text-emerald-800{% elif event.parse_status == 'OCR_MOCKED' %}bg-blue-100 text-blue-800{% else %}bg-zinc-100 text-zinc-600{% endif %}">{{ event.parse_status }}</span>
+              </div>
+              {% if ocr_job %}
+                <p class="mt-3 text-xs text-zinc-600">최근 OCR job #{{ ocr_job.id }} / {{ ocr_job.status }} / {{ ocr_job.progress_percent }}%</p>
+                {% if ocr_job.error_message %}
+                  <p class="mt-1 text-xs text-rose-700">{{ ocr_job.error_message[:180] }}</p>
+                {% endif %}
+              {% else %}
+                <p class="mt-3 text-xs text-zinc-500">OCR job 없음</p>
+              {% endif %}
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button class="ocr-request-button rounded-md bg-amber-600 px-4 py-2 text-xs font-black text-white" data-event-id="{{ event.id }}" type="button">OCR 큐 요청</button>
+                {% if event.analysis_readiness.ready and not analysis %}
+                  <button class="basic-analysis-button rounded-md bg-emerald-700 px-4 py-2 text-xs font-black text-white" data-event-id="{{ event.id }}" type="button">기본 AI 분석 승인</button>
+                {% elif analysis %}
+                  <span class="rounded-md bg-emerald-50 px-4 py-2 text-xs font-black text-emerald-800">기본 분석 완료</span>
+                {% else %}
+                  <span class="rounded-md bg-zinc-100 px-4 py-2 text-xs font-bold text-zinc-500">기본 분석 대기</span>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+
+          <div class="grid gap-4 p-5 lg:grid-cols-3">
+            <details class="rounded-md border border-zinc-200 p-4" open>
+              <summary class="cursor-pointer font-black">기본 분석</summary>
+              {% if analysis %}
+                <div class="mt-3 space-y-3 text-sm leading-6">
+                  <div>
+                    <p class="font-bold text-zinc-500">물건 요약</p>
+                    <p class="mt-1 whitespace-pre-wrap">{{ analysis.item_details }}</p>
+                  </div>
+                  <div>
+                    <p class="font-bold text-zinc-500">리스크</p>
+                    <p class="mt-1 whitespace-pre-wrap">{{ analysis.risk_comment }}</p>
+                  </div>
+                  <div>
+                    <p class="font-bold text-zinc-500">최저가</p>
+                    <p class="mt-1">{{ analysis.min_price }}</p>
+                  </div>
+                </div>
+              {% else %}
+                <p class="mt-3 text-sm text-zinc-500">기본 분석 없음</p>
+              {% endif %}
+            </details>
+
+            <details class="rounded-md border border-zinc-200 p-4" {% if detailed_ready %}open{% endif %}>
+              <summary class="cursor-pointer font-black">상세 분석</summary>
+              {% if detailed_ready %}
+                <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-zinc-950 p-4 text-xs leading-6 text-zinc-50">{{ analysis.detailed_analysis }}</pre>
+              {% elif job %}
+                <p class="mt-3 text-sm text-zinc-600">상태: {{ job.status }}</p>
+                {% if job.error_message %}
+                  <pre class="mt-3 max-h-40 overflow-auto whitespace-pre-wrap rounded-md bg-rose-50 p-3 text-xs text-rose-800">{{ job.error_message }}</pre>
+                {% endif %}
+              {% else %}
+                <p class="mt-3 text-sm text-zinc-500">상세 분석 요청 전입니다.</p>
+              {% endif %}
+            </details>
+
+            <details class="rounded-md border border-zinc-200 p-4">
+              <summary class="cursor-pointer font-black">수집 원문과 이벤트</summary>
+              <div class="mt-3 space-y-3 text-sm">
+                <a class="inline-flex rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-bold text-zinc-800" href="/documents/raw/{{ event.raw_document.id }}" target="_blank">원본 파일 열기</a>
+                <p class="break-all font-mono text-xs text-zinc-500">{{ event.raw_document.file_path }}</p>
+                {% if evidence %}
+                  <p class="text-xs text-zinc-600">상세 페이지 텍스트 {{ evidence.detail_page_text|length }}자</p>
+                {% endif %}
+                {% if event.latest_deep_job_events %}
+                  <ul class="max-h-52 space-y-2 overflow-auto">
+                    {% for job_event in event.latest_deep_job_events %}
+                      <li class="rounded-md bg-zinc-50 p-2 text-xs">
+                        <strong>{{ job_event.event_type }}</strong>
+                        <p class="mt-1 text-zinc-600">{{ job_event.message }}</p>
+                      </li>
+                    {% endfor %}
+                  </ul>
+                {% else %}
+                  <p class="text-xs text-zinc-500">최근 분석 이벤트 없음</p>
+                {% endif %}
+              </div>
+            </details>
+
+            <details class="rounded-md border border-zinc-200 p-4 lg:col-span-3">
+              <summary class="cursor-pointer font-black">모델별 분석 결과</summary>
+              <div class="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                {% for provider, typed_results in event.model_results.items() %}
+                  <div class="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm">
+                    <p class="font-black">{{ provider }}</p>
+                    {% for analysis_type, result in typed_results.items() %}
+                      <div class="mt-3 rounded-md bg-white p-3">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="rounded-full bg-zinc-950 px-2 py-0.5 text-xs font-black text-white">{{ analysis_type }}</span>
+                          <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-zinc-700">{{ result.status }}</span>
+                          <span class="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-zinc-700">{{ result.prompt_version }}</span>
+                        </div>
+                        <p class="mt-2 text-xs text-zinc-500">가격 {{ result.min_price }} / 입찰 {{ result.bidding_date }}</p>
+                        <p class="mt-2 line-clamp-4 text-xs leading-5 text-zinc-700">{{ result.risk_comment or result.detailed_analysis }}</p>
+                        {% if result.markdown_path %}
+                          <p class="mt-2 break-all font-mono text-[11px] text-zinc-500">{{ result.markdown_path }}</p>
+                        {% endif %}
+                        {% if result.reviews %}
+                          <details class="mt-3 rounded-md border border-zinc-200 bg-zinc-50 p-2">
+                            <summary class="cursor-pointer text-xs font-black text-zinc-700">검수 이력 {{ result.reviews|length }}건</summary>
+                            <div class="mt-2 max-h-40 space-y-2 overflow-auto">
+                              {% for review in result.reviews %}
+                                <div class="rounded-md bg-white p-2 text-[11px] leading-5">
+                                  <p class="font-bold">가격 {{ review.price_score }} / 날짜 {{ review.date_score }} / 리스크 {{ review.risk_score }} / 근거 {{ review.evidence_score }} / 환각 {{ review.hallucination_score }}</p>
+                                  {% if review.notes %}
+                                    <p class="mt-1 text-zinc-600">{{ review.notes }}</p>
+                                  {% endif %}
+                                  <p class="mt-1 text-zinc-400">{{ review.reviewer }} · {{ review.created_at }}</p>
+                                </div>
+                              {% endfor %}
+                            </div>
+                          </details>
+                        {% endif %}
+                        <form action="/admin/analysis-results/{{ result.id }}/reviews" method="post" class="review-form mt-3 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                          <p class="text-xs font-black text-zinc-700">관리자 검수 입력</p>
+                          <div class="grid grid-cols-5 gap-1 text-[11px]">
+                            {% for name, label in [('price_score','가격'), ('date_score','날짜'), ('risk_score','리스크'), ('evidence_score','근거'), ('hallucination_score','환각')] %}
+                              <label>
+                                <span class="block font-bold text-zinc-500">{{ label }}</span>
+                                <input name="{{ name }}" type="number" min="0" max="5" value="3" class="mt-1 w-full rounded-md border border-zinc-300 px-1 py-1">
+                              </label>
+                            {% endfor %}
+                          </div>
+                          <textarea name="notes" rows="2" maxlength="4000" placeholder="검수 메모" class="w-full rounded-md border border-zinc-300 px-2 py-1 text-xs"></textarea>
+                          <button type="submit" class="w-full rounded-md bg-zinc-950 px-3 py-1.5 text-xs font-black text-white">검수 저장</button>
+                        </form>
+                      </div>
+                    {% endfor %}
+                  </div>
+                {% else %}
+                  <p class="text-sm text-zinc-500">모델별 분석 결과가 없습니다.</p>
+                {% endfor %}
+              </div>
+            </details>
+          </div>
+        </article>
+      {% else %}
+        <div class="rounded-md border border-dashed border-zinc-300 bg-white p-8 text-center text-zinc-500">수집된 물건이 없습니다.</div>
+      {% endfor %}
+    </section>
+  </main>
+
+  <script>
+    async function postJson(url, body) {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      });
+      if (!response.ok) throw new Error("요청 실패");
+      return response.json();
+    }
+
+    document.querySelectorAll(".cancel-request-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await postJson(`/api/analyze/jobs/${button.dataset.jobId}/cancel-request`);
+          location.reload();
+        } catch {
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll(".retry-job-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await postJson(`/api/analyze/jobs/${button.dataset.jobId}/retry`);
+          location.reload();
+        } catch {
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll(".force-analysis-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await postJson(`/api/analyze/deep/${button.dataset.eventId}/jobs?force=true`);
+          location.reload();
+        } catch {
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll(".ocr-request-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        button.disabled = true;
+        try {
+          await postJson(`/api/admin/events/${button.dataset.eventId}/ocr/jobs?force=true`);
+          location.reload();
+        } catch {
+          button.disabled = false;
+        }
+      });
+    });
+
+    document.querySelectorAll(".basic-analysis-button").forEach((button) => {
+      button.addEventListener("click", async () => {
+        if (!confirm("이 원문을 현재 선택된 기본 분석 도구로 분석할까요?")) return;
+        button.disabled = true;
+        button.textContent = "분석 중";
+        try {
+          await postJson(`/api/admin/events/${button.dataset.eventId}/basic-analysis`);
+          location.reload();
+        } catch {
+          button.disabled = false;
+          button.textContent = "기본 AI 분석 승인";
+          alert("기본 분석 요청에 실패했습니다. 관리자 로그와 API 키 설정을 확인하세요.");
+        }
+      });
+    });
+
+    window.setTimeout(() => {
+      const active = {{ (job_counts.get('PENDING', 0) + job_counts.get('RUNNING', 0))|int }};
+      if (active > 0) location.reload();
+    }, 10000);
+  </script>
+</body>
+</html>

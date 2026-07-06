@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>검수 이력 | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  <main class="mx-auto max-w-6xl px-5 py-8">
+    <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-indigo-700">Admin Console</p>
+        <h1 class="mt-1 text-3xl font-black">검수 이력</h1>
+        <p class="mt-2 text-sm text-zinc-600">분석 품질 검수와 관리자 작업 흔적을 확인합니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/admin">통합</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2" href="/admin/analysis">분석</a>
+      </div>
+    </header>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-3">
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">검수 누적</p><p class="mt-2 text-3xl font-black">{{ analysis_review_summary.total_reviews }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">평균 가격 점수</p><p class="mt-2 text-3xl font-black">{{ analysis_review_summary.averages.price_score }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">평균 근거 점수</p><p class="mt-2 text-3xl font-black">{{ analysis_review_summary.averages.evidence_score }}</p></div>
+    </section>
+
+    <section class="grid gap-5 lg:grid-cols-2">
+      <div class="rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+        <h2 class="text-xl font-black">최근 검수</h2>
+        <div class="mt-4 space-y-3">
+          {% for review in recent_reviews %}
+            <div class="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm">
+              <p class="font-black">{{ review.reviewer }} / {{ review.created_at }}</p>
+              <p class="mt-1 text-zinc-600">가격 {{ review.price_score }} · 일정 {{ review.date_score }} · 위험 {{ review.risk_score }} · 근거 {{ review.evidence_score }}</p>
+              <p class="mt-1 text-zinc-600">{{ review.notes }}</p>
+            </div>
+          {% else %}
+            <p class="text-sm text-zinc-500">검수 이력이 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+      <div class="rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+        <h2 class="text-xl font-black">최근 감사 로그</h2>
+        <div class="mt-4 space-y-3">
+          {% for log in recent_audit_logs %}
+            <div class="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm">
+              <p class="font-black">{{ log.action }} / {{ log.created_at }}</p>
+              <p class="mt-1 text-zinc-600">{{ log.summary }}</p>
+            </div>
+          {% else %}
+            <p class="text-sm text-zinc-500">감사 로그가 없습니다.</p>
+          {% endfor %}
+        </div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

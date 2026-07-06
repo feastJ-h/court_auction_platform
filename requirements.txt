@@ -1,0 +1,16 @@
+fastapi
+uvicorn
+jinja2
+sqlalchemy
+pydantic-settings
+python-dotenv
+playwright
+pdfplumber
+pyhwp
+google-generativeai
+openai
+tenacity
+python-multipart
+websockets
+pdf2image
+pillow

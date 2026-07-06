@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>물건 관리 | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  <main class="mx-auto max-w-7xl px-5 py-8">
+    <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-indigo-700">Admin Console</p>
+        <h1 class="mt-1 text-3xl font-black">물건 관리</h1>
+        <p class="mt-2 text-sm text-zinc-600">회생·파산 물건과 온비드 공매 현황을 큰 카테고리 기준으로 확인합니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/admin">통합</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2" href="/admin/collection">수집</a>
+        <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/auctions">온비드</a>
+      </div>
+    </header>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-4">
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">회생·파산 물건</p><p class="mt-2 text-3xl font-black">{{ events|length }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">온비드 공매</p><p class="mt-2 text-3xl font-black">{{ auction_count }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">OCR 필요</p><p class="mt-2 text-3xl font-black">{{ collection_quality.parse_status_counts.get('OCR_REQUIRED', 0) }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">UNKNOWN 날짜</p><p class="mt-2 text-3xl font-black">{{ collection_quality.unknown_notice_count }}</p></div>
+    </section>
+
+    <section class="rounded-md border border-zinc-200 bg-white shadow-sm">
+      <div class="border-b border-zinc-200 p-5">
+        <h2 class="text-xl font-black">회생·파산 물건 목록</h2>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-zinc-200 text-sm">
+          <thead class="bg-zinc-50 text-left text-xs font-black uppercase text-zinc-500">
+            <tr><th class="px-4 py-3">사건번호</th><th class="px-4 py-3">제목</th><th class="px-4 py-3">주소</th><th class="px-4 py-3">파싱</th><th class="px-4 py-3">분석</th></tr>
+          </thead>
+          <tbody class="divide-y divide-zinc-100">
+            {% for event in events[:120] %}
+              <tr>
+                <td class="px-4 py-3 font-mono font-bold">{{ event.case_number }}</td>
+                <td class="px-4 py-3 font-black">{{ event.title }}</td>
+                <td class="max-w-md px-4 py-3 text-zinc-600">{{ event.asset.address }}</td>
+                <td class="px-4 py-3">{{ event.parse_status }}</td>
+                <td class="px-4 py-3">{{ '가능' if event.analysis_readiness.ready else event.analysis_readiness.reason }}</td>
+              </tr>
+            {% else %}
+              <tr><td class="px-4 py-8 text-center text-zinc-500" colspan="5">물건이 없습니다.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

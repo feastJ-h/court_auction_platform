@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>수집 관리 | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-100 text-zinc-950">
+  {% macro run_table(runs, empty_message, head_class='bg-zinc-50') %}
+    <div class="overflow-x-auto">
+      <table class="min-w-full divide-y divide-zinc-200 text-sm">
+        <thead class="{{ head_class }} text-left text-xs font-black uppercase text-zinc-500">
+          <tr>
+            <th class="px-4 py-3">ID</th>
+            <th class="px-4 py-3">유형</th>
+            <th class="px-4 py-3">상태</th>
+            <th class="px-4 py-3">대상 기간</th>
+            <th class="px-4 py-3">다운로드</th>
+            <th class="px-4 py-3">저장</th>
+            <th class="px-4 py-3">중복</th>
+            <th class="px-4 py-3">실패</th>
+            <th class="px-4 py-3">로그</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-zinc-100">
+          {% for run in runs %}
+            <tr>
+              <td class="px-4 py-3 font-mono font-bold">#{{ run.id }}</td>
+              <td class="px-4 py-3">{{ run.run_type }}</td>
+              <td class="px-4 py-3">
+                <span class="rounded-full px-2.5 py-1 text-xs font-black {% if run.status == 'SUCCEEDED' %}bg-emerald-100 text-emerald-800{% elif run.status == 'RUNNING' %}bg-blue-100 text-blue-800{% elif run.status == 'PARTIAL' %}bg-amber-100 text-amber-800{% else %}bg-rose-100 text-rose-800{% endif %}">{{ run.status }}</span>
+              </td>
+              <td class="px-4 py-3">{{ run.target_start_date }} ~ {{ run.target_end_date }}</td>
+              <td class="px-4 py-3">{{ run.documents_downloaded }}</td>
+              <td class="px-4 py-3">{{ run.documents_inserted }}</td>
+              <td class="px-4 py-3">{{ run.duplicates_skipped }}</td>
+              <td class="px-4 py-3">{{ run.failed_downloads }}</td>
+              <td class="px-4 py-3 font-mono text-xs text-zinc-500">{{ run.log_path or '-' }}</td>
+            </tr>
+            {% if run.error_message %}
+              <tr class="bg-rose-50">
+                <td class="px-4 py-2 text-xs font-bold text-rose-800" colspan="9">{{ run.error_message[:500] }}</td>
+              </tr>
+            {% endif %}
+          {% else %}
+            <tr>
+              <td class="px-4 py-8 text-center text-zinc-500" colspan="9">{{ empty_message }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endmacro %}
+
+  <main class="mx-auto max-w-7xl px-5 py-8">
+    <header class="mb-6 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div>
+        <p class="text-sm font-semibold text-emerald-700">Admin Console</p>
+        <h1 class="mt-1 text-3xl font-black">수집 관리</h1>
+        <p class="mt-2 text-sm text-zinc-600">회생/파산 문서 수집과 온비드 공매 수집을 분리해서 모니터링합니다.</p>
+      </div>
+      <div class="flex flex-wrap gap-2 text-sm font-bold">
+        <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/admin">통합 대시보드</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/admin/assets">물건</a>
+        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/admin/analysis">분석</a>
+        <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/auctions">온비드 공매</a>
+      </div>
+    </header>
+
+    {% set latest = crawl_summary.latest_run %}
+    {% set latest_success = crawl_summary.latest_success %}
+    {% set onbid_latest = crawl_summary.onbid_latest_run %}
+    {% set onbid_latest_success = crawl_summary.onbid_latest_success %}
+
+    <section class="mb-5 grid gap-4 xl:grid-cols-2">
+      <div class="rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
+        <div class="flex items-start justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-indigo-700">회생/파산 수집</p>
+            <h2 class="mt-1 text-xl font-black">법원 문서 수집 운영</h2>
+            <p class="mt-2 text-sm text-zinc-600">AI 분석의 입력이 되는 공고 문서와 사건 데이터를 간헐적으로 수집합니다.</p>
+          </div>
+          <span class="rounded-full bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">run_scheduled_crawl.ps1</span>
+        </div>
+        <div class="mt-4 grid gap-3 md:grid-cols-4">
+          <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <p class="text-xs font-bold text-zinc-500">마지막 상태</p>
+            <p class="mt-2 text-2xl font-black {% if latest and latest.status == 'SUCCEEDED' %}text-emerald-700{% elif latest and latest.status in ['FAILED', 'PARTIAL'] %}text-rose-700{% else %}text-zinc-900{% endif %}">{{ latest.status if latest else '기록 없음' }}</p>
+            <p class="mt-1 text-xs text-zinc-500">{{ latest.started_at if latest else '-' }}</p>
+          </div>
+          <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <p class="text-xs font-bold text-zinc-500">마지막 성공</p>
+            <p class="mt-2 text-base font-black">{{ latest_success.finished_at if latest_success else '없음' }}</p>
+          </div>
+          <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <p class="text-xs font-bold text-zinc-500">다음 예정</p>
+            <p class="mt-2 text-base font-black">{{ crawl_summary.next_scheduled_at.strftime('%Y-%m-%d %H:%M') }}</p>
+          </div>
+          <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+            <p class="text-xs font-bold text-zinc-500">운영 시간</p>
+            <p class="mt-2 text-sm font-black">{{ crawl_summary.court_schedule_label }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-md border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+        <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p class="text-sm font-semibold text-emerald-700">온비드 공매 수집</p>
+            <h2 class="mt-1 text-xl font-black">목록, 상세, 공고 물건정보 운영</h2>
+            <p class="mt-2 text-sm text-emerald-900">온비드는 데이터량이 많으므로 더 자주 수집하고, 공고 상세와 공고 물건 연결은 별도 흐름으로 관찰합니다.</p>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <button class="onbid-sync-button rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=all" type="button">샘플 물건</button>
+            <button class="onbid-sync-button rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=notice&include_notice_details=true&include_notice_items=true" type="button">샘플 공고</button>
+            <button class="onbid-sync-button rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=100&api_kind=all" type="button">실제 API</button>
+          </div>
+        </div>
+        <div class="mt-4 grid gap-3 md:grid-cols-4">
+          <div class="rounded-md border border-emerald-200 bg-white p-4">
+            <p class="text-xs font-bold text-zinc-500">마지막 상태</p>
+            <p class="mt-2 text-2xl font-black {% if onbid_latest and onbid_latest.status == 'SUCCEEDED' %}text-emerald-700{% elif onbid_latest and onbid_latest.status in ['FAILED', 'PARTIAL'] %}text-rose-700{% else %}text-zinc-900{% endif %}">{{ onbid_latest.status if onbid_latest else '기록 없음' }}</p>
+            <p class="mt-1 text-xs text-zinc-500">{{ onbid_latest.started_at if onbid_latest else '-' }}</p>
+          </div>
+          <div class="rounded-md border border-emerald-200 bg-white p-4">
+            <p class="text-xs font-bold text-zinc-500">마지막 성공</p>
+            <p class="mt-2 text-base font-black">{{ onbid_latest_success.finished_at if onbid_latest_success else '없음' }}</p>
+          </div>
+          <div class="rounded-md border border-emerald-200 bg-white p-4">
+            <p class="text-xs font-bold text-zinc-500">다음 예정</p>
+            <p class="mt-2 text-base font-black">{{ crawl_summary.next_onbid_scheduled_at.strftime('%Y-%m-%d %H:%M') }}</p>
+          </div>
+          <div class="rounded-md border border-emerald-200 bg-white p-4">
+            <p class="text-xs font-bold text-zinc-500">운영 시간</p>
+            <p class="mt-2 text-sm font-black">{{ crawl_summary.onbid_schedule_label }}</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-4">
+      <div class="rounded-md border border-zinc-200 bg-white p-4">
+        <p class="text-xs font-bold text-zinc-500">전체 문서</p>
+        <p class="mt-2 text-3xl font-black">{{ collection_quality.total_documents }}</p>
+      </div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4">
+        <p class="text-xs font-bold text-zinc-500">UNKNOWN 상태</p>
+        <p class="mt-2 text-3xl font-black">{{ collection_quality.unknown_notice_count }}</p>
+      </div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4">
+        <p class="text-xs font-bold text-zinc-500">LOCAL_INGESTED</p>
+        <p class="mt-2 text-3xl font-black">{{ collection_quality.local_ingested_count }}</p>
+      </div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4">
+        <p class="text-xs font-bold text-zinc-500">OCR 필요</p>
+        <p class="mt-2 text-3xl font-black">{{ collection_quality.parse_status_counts.get('OCR_REQUIRED', 0) }}</p>
+      </div>
+    </section>
+
+    <section class="mb-5 rounded-md border border-emerald-200 bg-white p-5 shadow-sm">
+      <div class="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+        <div>
+          <p class="text-sm font-semibold text-emerald-700">온비드 데이터 품질</p>
+          <h2 class="text-xl font-black">공고와 물건 연결 상태</h2>
+        </div>
+        <p class="text-xs font-bold text-zinc-500">최근 {{ onbid_metrics.days }}일 수집 실행 기준</p>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-4">
+        <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+          <p class="text-xs font-bold text-zinc-500">온비드 물건</p>
+          <p class="mt-2 text-3xl font-black">{{ onbid_metrics.items.total }}</p>
+          <p class="mt-1 text-xs text-zinc-500">공고번호 보유 {{ onbid_metrics.items.with_notice }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+          <p class="text-xs font-bold text-zinc-500">공고 저장</p>
+          <p class="mt-2 text-3xl font-black">{{ onbid_metrics.notices.total }}</p>
+          <p class="mt-1 text-xs text-zinc-500">상세 보유 {{ onbid_metrics.notices.with_detail }}건</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+          <p class="text-xs font-bold text-zinc-500">공고-물건 링크</p>
+          <p class="mt-2 text-3xl font-black">{{ onbid_metrics.links.notice_item_links }}</p>
+          <p class="mt-1 text-xs text-zinc-500">링크율 {{ onbid_metrics.links.item_notice_link_rate }}%</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-zinc-50 p-4">
+          <p class="text-xs font-bold text-zinc-500">최근 실행</p>
+          <p class="mt-2 text-3xl font-black">{{ onbid_metrics.runs.recent_total }}</p>
+          <p class="mt-1 text-xs text-zinc-500">성공 {{ onbid_metrics.runs.recent_success }} / 실패 {{ onbid_metrics.runs.recent_failed }}</p>
+        </div>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-4">
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">마감 지남</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.deadline_distribution.closed }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">7일 이내</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.deadline_distribution.today + onbid_metrics.deadline_distribution.within_3_days + onbid_metrics.deadline_distribution.within_7_days }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">30일 이내</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.deadline_distribution.within_14_days + onbid_metrics.deadline_distribution.within_30_days }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">마감 미상</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.deadline_distribution.unknown }}</p>
+        </div>
+      </div>
+      {% if onbid_metrics.runs.latest_failure %}
+        <div class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-900">
+          최근 온비드 실패: #{{ onbid_metrics.runs.latest_failure.id }} {{ onbid_metrics.runs.latest_failure.error_message[:300] }}
+        </div>
+      {% endif %}
+    </section>
+
+    <section class="mb-5 rounded-md border {% if collection_quality.quality_state == 'ok' %}border-emerald-200 bg-emerald-50{% else %}border-amber-200 bg-amber-50{% endif %} p-5">
+      <h2 class="text-lg font-black">수집 품질 경고</h2>
+      {% if collection_quality.quality_warnings %}
+        <ul class="mt-3 list-disc space-y-1 pl-5 text-sm font-semibold text-amber-900">
+          {% for warning in collection_quality.quality_warnings %}
+            <li>{{ warning }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="mt-2 text-sm font-semibold text-emerald-800">현재 확인된 경고가 없습니다.</p>
+      {% endif %}
+    </section>
+
+    <section class="mb-5 rounded-md border border-zinc-200 bg-white shadow-sm">
+      <div class="border-b border-zinc-200 p-5">
+        <h2 class="text-xl font-black">회생/파산 최근 수집 이력</h2>
+        <p class="mt-2 text-sm text-zinc-600">법원 문서 수집 스케줄 실행 결과입니다.</p>
+      </div>
+      {{ run_table(crawl_summary.court_recent_runs, '아직 회생/파산 수집 실행 이력이 없습니다.') }}
+    </section>
+
+    <section class="rounded-md border border-emerald-200 bg-white shadow-sm">
+      <div class="border-b border-emerald-200 p-5">
+        <h2 class="text-xl font-black">온비드 최근 수집 이력</h2>
+        <p class="mt-2 text-sm text-zinc-600">온비드 공매 목록, 상세, 공고 수집 실행 결과입니다.</p>
+      </div>
+      {{ run_table(crawl_summary.onbid_recent_runs, '아직 온비드 수집 실행 이력이 없습니다.', 'bg-emerald-50') }}
+    </section>
+  </main>
+  <script>
+    const bindOnbidButton = (button) => {
+      if (!button) return;
+      button.addEventListener("click", async () => {
+        const originalText = button.textContent;
+        button.disabled = true;
+        button.textContent = "수집 중";
+        try {
+          const response = await fetch(`/api/admin/auctions/onbid/sync?${button.dataset.query}`, { method: "POST" });
+          if (!response.ok) throw new Error("sync failed");
+          location.reload();
+        } catch {
+          button.disabled = false;
+          button.textContent = originalText;
+          alert("온비드 수집 실행에 실패했습니다.");
+        }
+      });
+    };
+    document.querySelectorAll(".onbid-sync-button").forEach(bindOnbidButton);
+  </script>
+</body>
+</html>

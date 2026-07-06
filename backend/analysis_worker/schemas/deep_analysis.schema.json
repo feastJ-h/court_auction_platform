@@ -1,0 +1,43 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "summary",
+    "asset_type",
+    "price_opinion",
+    "key_dates",
+    "rights_and_legal_risks",
+    "physical_or_market_risks",
+    "required_follow_up_documents",
+    "recommended_action",
+    "confidence",
+    "markdown_report"
+  ],
+  "properties": {
+    "summary": { "type": "string" },
+    "asset_type": { "type": "string" },
+    "price_opinion": { "type": "string" },
+    "key_dates": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "rights_and_legal_risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "physical_or_market_risks": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "required_follow_up_documents": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "recommended_action": { "type": "string" },
+    "confidence": {
+      "type": "string",
+      "enum": ["low", "medium", "high"]
+    },
+    "markdown_report": { "type": "string" }
+  }
+}

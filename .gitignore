@@ -1,0 +1,37 @@
+﻿# secrets
+.env
+.env.*
+!.env.example
+
+# database
+*.db
+*.sqlite
+*.sqlite3
+
+# storage / runtime data
+storage/
+logs/
+*.log
+
+# python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# local/runtime
+*.lock
+runtime_settings.json
+
+# bad/invalid git metadata backups
+.git.bad-init-*/
+.git.bad-init-*
+.git.empty-invalid-*/
+.git.empty-invalid-*
+
+# OS/editor
+.DS_Store
+Thumbs.db

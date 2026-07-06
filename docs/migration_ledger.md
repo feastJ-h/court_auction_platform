@@ -1,5 +1,35 @@
 # Migration Ledger
 
+## v004 - Real ONBID operations and public category UX
+Change date: 2026-07-06
+
+### Purpose
+
+v004 adds real ONBID limited collection/probe support, public category derivation, missing-information badges, same-notice item lookup, and operations dry-run scripts.
+
+### Schema Changes
+
+No new table, column, index, or destructive migration was added in v004.
+
+### Data Handling
+
+- Existing `auction_items` duplicate key remains `source + cltr_mng_no + pbct_cdtn_no`.
+- `national_property` is derived from normalized/raw payload metadata and is not split into real-estate/movable categories.
+- Sparse external payloads without official duplicate identifiers receive deterministic derived keys based on stable source fields, not timestamps or random UUIDs.
+- Raw payload remains stored in the DB/runtime storage and is not exposed in public DTOs.
+
+### Rollback
+
+Code rollback restores the previous public ONBID UX and sync behavior. The real API rows inserted during v004 should be handled by restoring the pre-run DB backup when a data rollback is required.
+
+### Verification
+
+- `py_compile` for edited backend modules and new tests
+- `tests/onbid_category_filter_test.py`
+- `tests/sitemap_public_routes_test.py`
+- Existing ONBID/page/router/auth/operations tests
+- `run_onbid_scheduled_sync.ps1 -Sample -ApiKind notice -Limit 20 -MaxPages 1 -IncludeNoticeDetails -IncludeNoticeItems`
+
 ## v003 - 온비드 사용자 개인화
 
 변경일: 2026-07-06

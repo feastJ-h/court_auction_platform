@@ -36,6 +36,8 @@ EXPECTED_SINGLETON_ROUTES = {
     ("GET", "/cases/{event_id}"),
     ("GET", "/about"),
     ("GET", "/disclaimer"),
+    ("GET", "/privacy"),
+    ("GET", "/terms"),
     ("GET", "/privacy-draft"),
     ("GET", "/robots.txt"),
     ("GET", "/sitemap.xml"),

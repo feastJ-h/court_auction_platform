@@ -91,7 +91,16 @@ def register_case_routes(
         }
 
     @app.get("/cases")
-    def public_case_list(request: Request, page: int = Query(1, ge=1), q: str = Query(""), category: str = Query("ALL")):
+    def public_case_list(
+        request: Request,
+        page: int = Query(1, ge=1),
+        q: str = Query(""),
+        category: str = Query("ALL"),
+        region: str = Query(""),
+        status: str = Query(""),
+        notice_date_from: str = Query(""),
+        expire_date_to: str = Query(""),
+    ):
         per_page = 20
         with session_scope() as session:
             current_user = require_user(request, session)
@@ -107,6 +116,14 @@ def register_case_routes(
                 ]
             if category != "ALL":
                 views = [view for view in views if view["main_category"] == category]
+            if region:
+                views = [view for view in views if region in view["address"]]
+            if status:
+                views = [view for view in views if status in view["status"]]
+            if notice_date_from:
+                views = [view for view in views if view["notice_date"] >= notice_date_from]
+            if expire_date_to:
+                views = [view for view in views if view["expire_date"] <= expire_date_to]
             return templates.TemplateResponse(
                 request,
                 "cases/index.html",
@@ -114,7 +131,14 @@ def register_case_routes(
                     "current_user": current_user,
                     "settings": get_settings(),
                     "cases": views,
-                    "filters": {"q": q, "category": category},
+                    "filters": {
+                        "q": q,
+                        "category": category,
+                        "region": region,
+                        "status": status,
+                        "notice_date_from": notice_date_from,
+                        "expire_date_to": expire_date_to,
+                    },
                     "pagination": {
                         "page": current_page,
                         "pages": list(range(1, total_pages + 1)),

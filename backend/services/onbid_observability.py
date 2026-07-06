@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import AuctionItem, AuctionNotice, AuctionNoticeItemLink, CrawlRun
+from backend.services.auction_items import build_onbid_info_badges, derive_onbid_category
 
 
 def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dict[str, Any]:
@@ -50,6 +51,8 @@ def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dic
     )
     latest_failure = next((run for run in recent_runs if run.status == "FAILED"), None)
     distribution = get_onbid_deadline_distribution(session)
+    category_counts = get_onbid_category_counts(session)
+    missing_summary = get_onbid_missing_summary(session)
     return {
         "days": max(1, days),
         "items": {
@@ -74,6 +77,8 @@ def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dic
             "by_type": summarize_runs_by_type(recent_runs),
         },
         "deadline_distribution": distribution,
+        "categories": category_counts,
+        "missing": missing_summary,
     }
 
 
@@ -111,6 +116,50 @@ def get_onbid_deadline_distribution(session: Session) -> dict[str, int]:
         else:
             buckets["over_30_days"] += 1
     return buckets
+
+
+def get_onbid_category_counts(session: Session) -> dict[str, int]:
+    counts = {"real_estate": 0, "movable": 0, "national_property": 0, "other": 0}
+    items = session.scalars(select(AuctionItem).where(AuctionItem.source == "ONBID"))
+    for item in items:
+        category = derive_onbid_category(item)
+        counts[category if category in counts else "other"] += 1
+    return counts
+
+
+def get_onbid_missing_summary(session: Session) -> dict[str, Any]:
+    labels = {
+        "가격 정보 확인 필요": "price_missing",
+        "소재지 정보 확인 필요": "location_missing",
+        "입찰 일정 확인 필요": "schedule_missing",
+        "공고 연결 확인 필요": "notice_missing",
+        "상세 정보 수집 필요": "detail_missing",
+        "원문 링크 확인 필요": "source_url_missing",
+    }
+    counts = {value: 0 for value in labels.values()}
+    total = 0
+    items = session.scalars(
+        select(AuctionItem)
+        .where(AuctionItem.source == "ONBID")
+        .options()
+    )
+    for item in items:
+        total += 1
+        badges = build_onbid_info_badges(item)
+        for label in badges["missing"]:
+            key = labels.get(label)
+            if key:
+                counts[key] += 1
+    return {
+        "total": total,
+        **counts,
+        "price_missing_rate": percentage(counts["price_missing"], total),
+        "location_missing_rate": percentage(counts["location_missing"], total),
+        "schedule_missing_rate": percentage(counts["schedule_missing"], total),
+        "notice_missing_rate": percentage(counts["notice_missing"], total),
+        "detail_missing_rate": percentage(counts["detail_missing"], total),
+        "source_url_missing_rate": percentage(counts["source_url_missing"], total),
+    }
 
 
 def parse_date(value: str) -> date | None:

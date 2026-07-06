@@ -4,7 +4,7 @@ param(
     [int]$Limit = 100,
     [int]$PageNo = 1,
     [int]$MaxPages = 8,
-    [ValidateSet("real_estate", "movable", "all", "notice")]
+    [ValidateSet("real_estate", "movable", "all", "notice", "national_property")]
     [string]$ApiKind = "all",
     [switch]$IncludeDetails,
     [switch]$IncludeNoticeDetails,

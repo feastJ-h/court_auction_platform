@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import hashlib
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -36,6 +37,117 @@ def str_value(payload: dict[str, Any], *keys: str, default: str = "") -> str:
 
 def json_dump(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+ONBID_CATEGORY_LABELS = {
+    "all": "전체",
+    "real_estate": "부동산",
+    "movable": "동산",
+    "national_property": "국유일반재산",
+    "other": "기타",
+}
+
+REAL_ESTATE_TOKENS = (
+    "real estate",
+    "land",
+    "building",
+    "apartment",
+    "office",
+    "house",
+    "부동산",
+    "토지",
+    "건물",
+    "아파트",
+    "주거",
+)
+MOVABLE_TOKENS = (
+    "movable",
+    "vehicle",
+    "car",
+    "ship",
+    "machine",
+    "equipment",
+    "동산",
+    "차량",
+    "운송",
+    "기계",
+    "장비",
+)
+
+
+def _payload_from_item(item_or_payload: Any) -> dict[str, Any]:
+    if isinstance(item_or_payload, dict):
+        return item_or_payload
+    raw_payload = getattr(item_or_payload, "raw_payload", "") or "{}"
+    try:
+        parsed = json.loads(raw_payload)
+    except Exception:
+        parsed = {}
+    return {
+        "source_api": parsed.get("_source_api") or parsed.get("sourceApi") or "",
+        "asset_type": getattr(item_or_payload, "asset_type", ""),
+        "usage": getattr(item_or_payload, "usage", ""),
+        "category": parsed.get("category") or "",
+        "raw_payload": parsed,
+    }
+
+
+def derive_onbid_category(item_or_payload: Any) -> str:
+    payload = _payload_from_item(item_or_payload)
+    raw_payload = payload.get("raw_payload") if isinstance(payload.get("raw_payload"), dict) else payload
+    source_api = str(payload.get("source_api") or payload.get("_source_api") or raw_payload.get("_source_api") or "").lower()
+    explicit = str(payload.get("category") or raw_payload.get("category") or "").lower()
+    text = " ".join(
+        str(value or "")
+        for value in (
+            source_api,
+            explicit,
+            payload.get("asset_type"),
+            payload.get("usage"),
+            raw_payload.get("prptDivNm"),
+            raw_payload.get("cltrUsgLclsCtgrNm"),
+            raw_payload.get("cltrUsgMclsCtgrNm"),
+            raw_payload.get("cltrUsgSclsCtgrNm"),
+            raw_payload.get("apiKind"),
+        )
+    ).lower()
+    if "national_property" in text or "bid_target" in text or "national property" in text or "국유" in text:
+        return "national_property"
+    if any(token in text for token in REAL_ESTATE_TOKENS):
+        return "real_estate"
+    if any(token in text for token in MOVABLE_TOKENS):
+        return "movable"
+    return "other"
+
+
+def get_onbid_category_label(category: str) -> str:
+    return ONBID_CATEGORY_LABELS.get(str(category or "").lower(), ONBID_CATEGORY_LABELS["other"])
+
+
+def build_onbid_info_badges(item: AuctionItem) -> dict[str, Any]:
+    has_price = bool(item.minimum_bid_price or item.appraisal_price)
+    has_location = bool((item.address or "").strip())
+    has_schedule = bool((item.bid_end_at or "").strip())
+    has_notice = bool(item.notice_links or item.pbanc_mng_no)
+    has_detail = bool(item.item_description or item.attachment_summary or item.cautions)
+    has_source_url = any(link.notice and link.notice.detail_url for link in item.notice_links)
+    available: list[str] = []
+    missing: list[str] = []
+    checks = [
+        (has_price, "가격 정보 있음", "가격 정보 확인 필요"),
+        (has_location, "소재지 있음", "소재지 정보 확인 필요"),
+        (has_schedule, "입찰 일정 있음", "입찰 일정 확인 필요"),
+        (has_notice, "공고 연결", "공고 연결 확인 필요"),
+        (has_detail, "상세 정보 있음", "상세 정보 수집 필요"),
+        (has_source_url, "원문 링크 있음", "원문 링크 확인 필요"),
+    ]
+    for ok, available_label, missing_label in checks:
+        (available if ok else missing).append(available_label if ok else missing_label)
+    return {
+        "available": available,
+        "missing": missing,
+        "has_critical_missing": not (has_price and has_location and has_schedule),
+    }
 
 
 def normalize_match_text(value: str) -> str:
@@ -155,10 +267,19 @@ def calculate_d_day(value: str) -> dict[str, Any]:
 
 def normalize_auction_payload(payload: dict[str, Any]) -> dict[str, Any]:
     raw_payload = payload.get("_raw") if isinstance(payload.get("_raw"), dict) else payload
+    source_api = str_value(payload, "_source_api", "source_api")
+    cltr_mng_no = str_value(payload, "cltrMngNo", "cltr_mng_no")
+    pbct_cdtn_no = str_value(payload, "pbctCdtnNo", "pbct_cdtn_no")
+    if not cltr_mng_no:
+        seed = "|".join(str_value(payload, key) for key in ("pbancMngNo", "noticeNo", "itemNo", "cltrNm", "itemName"))
+        cltr_mng_no = "derived-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
+    if not pbct_cdtn_no:
+        seed = "|".join(str_value(payload, key) for key in ("pbctNo", "pbctNsq", "pbancMngNo", "itemNo", "cltrNm", "itemName"))
+        pbct_cdtn_no = "derived-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()[:16]
     return {
         "source": str_value(payload, "source", default="ONBID"),
-        "cltr_mng_no": str_value(payload, "cltrMngNo", "cltr_mng_no"),
-        "pbct_cdtn_no": str_value(payload, "pbctCdtnNo", "pbct_cdtn_no"),
+        "cltr_mng_no": cltr_mng_no,
+        "pbct_cdtn_no": pbct_cdtn_no,
         "pbanc_mng_no": str_value(payload, "pbancMngNo", "pbanc_mng_no"),
         "onbid_cltr_no": str_value(payload, "onbidCltrno", "onbid_cltr_no"),
         "pbct_no": str_value(payload, "pbctNo", "pbct_no"),
@@ -188,7 +309,7 @@ def normalize_auction_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "bid_condition": str_value(payload, "bidCondition", "bid_condition", "입찰 조건"),
         "contract_condition": str_value(payload, "contractCondition", "contract_condition", "계약 조건"),
         "cautions": str_value(payload, "cautions", "유의사항"),
-        "raw_payload": json_dump(raw_payload),
+        "raw_payload": json_dump({"_source_api": source_api, **raw_payload} if source_api else raw_payload),
     }
 
 
@@ -385,6 +506,9 @@ def list_auction_items(
     min_discount_rate: float | None = None,
     has_notice: str = "ALL",
     has_detail: str = "ALL",
+    category: str = "all",
+    notice_id: int | None = None,
+    pbanc_mng_no: str = "",
     sort: str = "closing_soon",
     limit: int = 50,
     offset: int = 0,
@@ -426,6 +550,11 @@ def list_auction_items(
         statement = statement.where(or_(AuctionItem.item_description != "", AuctionItem.attachment_summary != ""))
     if has_detail == "no":
         statement = statement.where(AuctionItem.item_description == "", AuctionItem.attachment_summary == "")
+    statement = apply_onbid_category_filter(statement, category)
+    if notice_id is not None:
+        statement = statement.where(AuctionItem.notice_links.any(AuctionNoticeItemLink.notice_id == notice_id))
+    if pbanc_mng_no:
+        statement = statement.where(AuctionItem.pbanc_mng_no == pbanc_mng_no)
     if min_discount_rate is not None:
         discount_expr = (1 - (AuctionItem.minimum_bid_price * 1.0 / func.nullif(AuctionItem.appraisal_price, 0))) * 100
         statement = statement.where(AuctionItem.appraisal_price > 0, discount_expr >= min_discount_rate)
@@ -460,6 +589,9 @@ def count_auction_items(
     min_discount_rate: float | None = None,
     has_notice: str = "ALL",
     has_detail: str = "ALL",
+    category: str = "all",
+    notice_id: int | None = None,
+    pbanc_mng_no: str = "",
 ) -> int:
     statement = select(func.count(AuctionItem.id))
     if status != "ALL":
@@ -495,10 +627,61 @@ def count_auction_items(
         statement = statement.where(or_(AuctionItem.item_description != "", AuctionItem.attachment_summary != ""))
     if has_detail == "no":
         statement = statement.where(AuctionItem.item_description == "", AuctionItem.attachment_summary == "")
+    statement = apply_onbid_category_filter(statement, category)
+    if notice_id is not None:
+        statement = statement.where(AuctionItem.notice_links.any(AuctionNoticeItemLink.notice_id == notice_id))
+    if pbanc_mng_no:
+        statement = statement.where(AuctionItem.pbanc_mng_no == pbanc_mng_no)
     if min_discount_rate is not None:
         discount_expr = (1 - (AuctionItem.minimum_bid_price * 1.0 / func.nullif(AuctionItem.appraisal_price, 0))) * 100
         statement = statement.where(AuctionItem.appraisal_price > 0, discount_expr >= min_discount_rate)
     return session.scalar(statement) or 0
+
+
+def apply_onbid_category_filter(statement, category: str):
+    normalized = str(category or "all").lower()
+    if normalized in ("", "all"):
+        return statement
+    if normalized == "national_property":
+        return statement.where(
+            or_(
+                AuctionItem.raw_payload.like("%national_property%"),
+                AuctionItem.raw_payload.like("%bid_target%"),
+                AuctionItem.raw_payload.like("%국유%"),
+            )
+        )
+    real_estate_condition = or_(
+        AuctionItem.asset_type.like("%Real estate%"),
+        AuctionItem.asset_type.like("%부동산%"),
+        AuctionItem.asset_type.like("%토지%"),
+        AuctionItem.asset_type.like("%건물%"),
+        AuctionItem.usage.like("%부동산%"),
+        AuctionItem.usage.like("%토지%"),
+        AuctionItem.usage.like("%건물%"),
+        AuctionItem.raw_payload.like("%real_estate%"),
+    )
+    movable_condition = or_(
+        AuctionItem.asset_type.like("%Movable%"),
+        AuctionItem.asset_type.like("%동산%"),
+        AuctionItem.asset_type.like("%차량%"),
+        AuctionItem.asset_type.like("%기계%"),
+        AuctionItem.usage.like("%차량%"),
+        AuctionItem.usage.like("%기계%"),
+        AuctionItem.usage.like("%장비%"),
+        AuctionItem.raw_payload.like("%movable%"),
+    )
+    if normalized == "real_estate":
+        return statement.where(real_estate_condition)
+    if normalized == "movable":
+        return statement.where(movable_condition)
+    if normalized == "other":
+        return statement.where(
+            ~real_estate_condition,
+            ~movable_condition,
+            ~AuctionItem.raw_payload.like("%national_property%"),
+            ~AuctionItem.raw_payload.like("%bid_target%"),
+        )
+    return statement
 
 
 def get_auction_item(session: Session, item_id: int) -> AuctionItem | None:
@@ -512,6 +695,34 @@ def get_auction_item(session: Session, item_id: int) -> AuctionItem | None:
         )
         .where(AuctionItem.id == item_id)
     )
+
+
+def list_same_notice_items(session: Session, item: AuctionItem, *, limit: int = 20) -> list[AuctionItem]:
+    notice_ids = [link.notice_id for link in item.notice_links]
+    if notice_ids:
+        return list(
+            session.scalars(
+                select(AuctionItem)
+                .options(joinedload(AuctionItem.notice_links).joinedload(AuctionNoticeItemLink.notice))
+                .where(
+                    AuctionItem.id != item.id,
+                    AuctionItem.notice_links.any(AuctionNoticeItemLink.notice_id.in_(notice_ids)),
+                )
+                .order_by(AuctionItem.minimum_bid_price.asc(), AuctionItem.id.desc())
+                .limit(limit)
+            ).unique()
+        )
+    if item.pbanc_mng_no:
+        return list(
+            session.scalars(
+                select(AuctionItem)
+                .options(joinedload(AuctionItem.notice_links).joinedload(AuctionNoticeItemLink.notice))
+                .where(AuctionItem.id != item.id, AuctionItem.pbanc_mng_no == item.pbanc_mng_no)
+                .order_by(AuctionItem.minimum_bid_price.asc(), AuctionItem.id.desc())
+                .limit(limit)
+            ).unique()
+        )
+    return []
 
 
 def create_case_auction_link(
@@ -644,6 +855,8 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
     discount = calculate_discount_rate(item.appraisal_price, item.minimum_bid_price)
     minimum_rate = calculate_minimum_price_rate(item.appraisal_price, item.minimum_bid_price)
     score, reasons = calculate_liquidation_score(item)
+    category = derive_onbid_category(item)
+    info_badges = build_onbid_info_badges(item)
     notices = [
         {
             "id": link.notice.id,
@@ -697,6 +910,9 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         "recovery_estimates": calculate_recovery_estimates(item),
         "liquidation_score": score,
         "liquidation_reasons": reasons,
+        "category": category,
+        "category_label": get_onbid_category_label(category),
+        "info_badges": info_badges,
         "d_day": calculate_d_day(item.bid_end_at),
         "link_count": len(item.case_links),
         "notice_count": len(notices),

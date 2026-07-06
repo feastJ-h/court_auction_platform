@@ -362,6 +362,34 @@ SAMPLE_NOTICE_CLTR_ITEMS: dict[str, list[dict[str, Any]]] = {
 }
 
 
+SAMPLE_NATIONAL_PROPERTY_ITEMS: list[dict[str, Any]] = [
+    {
+        "source": "ONBID",
+        "cltrMngNo": "ONBID-NATIONAL-202607-001",
+        "pbctCdtnNo": "NPBCT-001",
+        "pbancMngNo": "NPBANC-202607-A",
+        "itemName": "National property sample asset",
+        "assetType": "National property",
+        "disposalMethod": "Sale",
+        "bidMethod": "Online bid",
+        "address": "Seoul sample national property",
+        "appraisalPrice": 90000000,
+        "minimumBidPrice": 70000000,
+        "bidDeposit": 7000000,
+        "bidStartAt": "2026-08-01",
+        "bidEndAt": "2026-08-08",
+        "openBidAt": "2026-08-09",
+        "status": "OPEN",
+        "agencyName": "KAMCO",
+        "usage": "national_property",
+        "itemDescription": "Sample bid target item for national property category.",
+        "noticeTitle": "National property sample notice",
+        "noticeBody": "Sample national property notice payload.",
+        "_source_api": "national_property",
+    }
+]
+
+
 class OnbidClient:
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -573,6 +601,33 @@ class OnbidClient:
             params=params,
             limit=limit,
             page_no=page_no,
+        )
+
+    def fetch_national_property_items(
+        self,
+        *,
+        limit: int = 20,
+        page_no: int = 1,
+        sample: bool = False,
+        params: dict[str, Any] | None = None,
+    ) -> tuple[list[dict[str, Any]], OnbidSyncResult]:
+        if sample or not self.settings.onbid_api_key:
+            items = [normalize_onbid_api_item(item, default_asset_type="National property", source_api="national_property") for item in SAMPLE_NATIONAL_PROPERTY_ITEMS[:limit]]
+            return items, OnbidSyncResult(fetched=len(items), source="sample", used_sample=True, total_count=len(items))
+        raw_items, total_count = self.fetch_bid_target_items(
+            params={"apiKind": "national_property", **(params or {})},
+            limit=limit,
+            page_no=page_no,
+        )
+        normalized = [
+            normalize_onbid_api_item(item, default_asset_type="National property", source_api="national_property")
+            for item in raw_items
+        ]
+        return normalized, OnbidSyncResult(
+            fetched=len(normalized),
+            source="onbid_api",
+            used_sample=False,
+            total_count=total_count,
         )
 
     def _fetch_real_estate_items_from_api(

@@ -114,7 +114,8 @@
           <div class="flex flex-wrap gap-2">
             <button class="onbid-sync-button rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=all" type="button">샘플 물건</button>
             <button class="onbid-sync-button rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white" data-query="sample=true&limit=20&api_kind=notice&include_notice_details=true&include_notice_items=true" type="button">샘플 공고</button>
-            <button class="onbid-sync-button rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=100&api_kind=all" type="button">실제 API</button>
+            <button class="onbid-sync-button rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=20&max_pages=1&api_kind=all" type="button">실제 API</button>
+            <button class="onbid-sync-button rounded-md bg-slate-700 px-4 py-2 text-sm font-black text-white" data-query="sample=false&limit=20&max_pages=1&api_kind=national_property" type="button">국유일반재산</button>
           </div>
         </div>
         <div class="mt-4 grid gap-3 md:grid-cols-4">
@@ -204,6 +205,38 @@
         <div class="rounded-md border border-zinc-200 bg-white p-4">
           <p class="text-xs font-bold text-zinc-500">마감 미상</p>
           <p class="mt-2 text-2xl font-black">{{ onbid_metrics.deadline_distribution.unknown }}</p>
+        </div>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-4">
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">부동산</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.categories.real_estate }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">동산</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.categories.movable }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">국유일반재산</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.categories.national_property }}</p>
+        </div>
+        <div class="rounded-md border border-zinc-200 bg-white p-4">
+          <p class="text-xs font-bold text-zinc-500">기타</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.categories.other }}</p>
+        </div>
+      </div>
+      <div class="mt-4 grid gap-3 md:grid-cols-3">
+        <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
+          <p class="text-xs font-bold text-amber-700">가격 정보 누락률</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.missing.price_missing_rate }}%</p>
+        </div>
+        <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
+          <p class="text-xs font-bold text-amber-700">소재지 정보 누락률</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.missing.location_missing_rate }}%</p>
+        </div>
+        <div class="rounded-md border border-amber-200 bg-amber-50 p-4">
+          <p class="text-xs font-bold text-amber-700">입찰 일정 누락률</p>
+          <p class="mt-2 text-2xl font-black">{{ onbid_metrics.missing.schedule_missing_rate }}%</p>
         </div>
       </div>
       {% if onbid_metrics.runs.latest_failure %}

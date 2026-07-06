@@ -81,6 +81,18 @@ def run_onbid_sync(
             total_count += movable_total_count
             used_sample = used_sample or movable_used_sample
             fetched_sources.append("movable")
+        if api_kind == "national_property":
+            national_payloads, national_total_count, national_used_sample = collect_national_property_pages(
+                client,
+                limit=limit,
+                page_no=page_no,
+                max_pages=max_pages,
+                sample=sample,
+            )
+            payloads.extend(national_payloads)
+            total_count += national_total_count
+            used_sample = used_sample or national_used_sample
+            fetched_sources.append("national_property")
         if api_kind == "notice":
             notice_bundles, notice_total_count, notice_used_sample = collect_notice_pages(
                 client,
@@ -181,7 +193,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-pages", type=int, default=1)
     parser.add_argument("--prpt-div-cd", default="0007,0010,0005,0002,0003,0006,0008,0011,0013")
     parser.add_argument("--pvct-trgt-yn", default="N")
-    parser.add_argument("--api-kind", choices=("real_estate", "movable", "all", "notice"), default="real_estate")
+    parser.add_argument("--api-kind", choices=("real_estate", "movable", "all", "notice", "national_property"), default="real_estate")
     parser.add_argument("--include-details", action="store_true")
     parser.add_argument("--include-notice-details", action="store_true")
     parser.add_argument("--include-notice-items", action="store_true")
@@ -260,6 +272,31 @@ def collect_movable_pages(
             sample=sample,
             page_no=current_page,
             include_details=include_details,
+        )
+        payloads.extend(page_payloads)
+        total_count = max(total_count, fetch_result.total_count)
+        used_sample = used_sample or fetch_result.used_sample
+        if sample or not page_payloads or len(page_payloads) < limit:
+            break
+    return payloads, total_count, used_sample
+
+
+def collect_national_property_pages(
+    client: OnbidClient,
+    *,
+    limit: int,
+    page_no: int,
+    max_pages: int,
+    sample: bool,
+) -> tuple[list[dict], int, bool]:
+    payloads: list[dict] = []
+    total_count = 0
+    used_sample = sample or not client.settings.onbid_api_key
+    for current_page in range(max(1, page_no), max(1, page_no) + max(1, max_pages)):
+        page_payloads, fetch_result = client.fetch_national_property_items(
+            limit=limit,
+            page_no=current_page,
+            sample=sample,
         )
         payloads.extend(page_payloads)
         total_count = max(total_count, fetch_result.total_count)

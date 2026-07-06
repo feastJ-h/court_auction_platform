@@ -14,6 +14,7 @@ from backend.services.auction_items import (
     find_auction_candidates_for_case,
     find_link_candidates_for_auction,
     get_auction_item,
+    list_same_notice_items,
     list_auction_items,
     serialize_auction_item,
 )
@@ -57,6 +58,9 @@ def register_auction_routes(
         min_discount_rate: float | None,
         has_notice: str,
         has_detail: str,
+        category: str,
+        notice_id: int | None,
+        pbanc_mng_no: str,
         sort: str,
         base_path: str,
     ):
@@ -78,6 +82,9 @@ def register_auction_routes(
                 min_discount_rate=min_discount_rate,
                 has_notice=has_notice,
                 has_detail=has_detail,
+                category=category,
+                notice_id=notice_id,
+                pbanc_mng_no=pbanc_mng_no,
             )
             total_pages = max(1, ceil(total_count / per_page))
             current_page = min(page, total_pages)
@@ -96,6 +103,9 @@ def register_auction_routes(
                 min_discount_rate=min_discount_rate,
                 has_notice=has_notice,
                 has_detail=has_detail,
+                category=category,
+                notice_id=notice_id,
+                pbanc_mng_no=pbanc_mng_no,
                 sort=sort,
                 limit=per_page,
                 offset=(current_page - 1) * per_page,
@@ -130,6 +140,9 @@ def register_auction_routes(
                         "min_discount_rate": min_discount_rate or "",
                         "has_notice": has_notice,
                         "has_detail": has_detail,
+                        "category": category,
+                        "notice_id": notice_id or "",
+                        "pbanc_mng_no": pbanc_mng_no,
                         "sort": sort,
                     },
                     "pagination": {
@@ -162,6 +175,9 @@ def register_auction_routes(
         min_discount_rate: float | None = Query(None, ge=0, le=100),
         has_notice: str = Query("ALL"),
         has_detail: str = Query("ALL"),
+        category: str = Query("all"),
+        notice_id: int | None = Query(None),
+        pbanc_mng_no: str = Query(""),
         sort: str = Query("closing_soon"),
     ):
         return _render_auction_list(
@@ -180,6 +196,9 @@ def register_auction_routes(
             min_discount_rate=min_discount_rate,
             has_notice=has_notice,
             has_detail=has_detail,
+            category=category,
+            notice_id=notice_id,
+            pbanc_mng_no=pbanc_mng_no,
             sort=sort,
             base_path="/auctions",
         )
@@ -202,6 +221,9 @@ def register_auction_routes(
         min_discount_rate: float | None = Query(None, ge=0, le=100),
         has_notice: str = Query("ALL"),
         has_detail: str = Query("ALL"),
+        category: str = Query("all"),
+        notice_id: int | None = Query(None),
+        pbanc_mng_no: str = Query(""),
         sort: str = Query("closing_soon"),
     ):
         return _render_auction_list(
@@ -220,6 +242,9 @@ def register_auction_routes(
             min_discount_rate=min_discount_rate,
             has_notice=has_notice,
             has_detail=has_detail,
+            category=category,
+            notice_id=notice_id,
+            pbanc_mng_no=pbanc_mng_no,
             sort=sort,
             base_path="/onbid",
         )
@@ -239,6 +264,7 @@ def register_auction_routes(
             if item is None:
                 raise HTTPException(status_code=404, detail="Auction item not found.")
             preference = get_preference(session, current_user.id, auction_item_id) if current_user else None
+            same_notice_items = [serialize_auction_item(other) for other in list_same_notice_items(session, item, limit=20)]
             return templates.TemplateResponse(
                 request,
                 "auctions/detail.html",
@@ -247,6 +273,7 @@ def register_auction_routes(
                     "settings": get_settings(),
                     "item": item,
                     "view": serialize_auction_item(item),
+                    "same_notice_items": same_notice_items,
                     "preference": serialize_preference(preference),
                     "base_path": base_path,
                 },
@@ -379,7 +406,8 @@ def register_auction_routes(
         request: Request,
         sample: bool = Query(True),
         limit: int = Query(20, ge=1, le=100),
-        api_kind: str = Query("real_estate", pattern="^(real_estate|movable|all|notice)$"),
+        max_pages: int = Query(1, ge=1, le=10),
+        api_kind: str = Query("real_estate", pattern="^(real_estate|movable|all|notice|national_property)$"),
         include_details: bool = Query(False),
         include_notice_details: bool = Query(False),
         include_notice_items: bool = Query(False),
@@ -392,6 +420,7 @@ def register_auction_routes(
             limit=limit,
             sample=sample,
             api_kind=api_kind,
+            max_pages=max_pages,
             include_details=include_details,
             include_notice_details=include_notice_details,
             include_notice_items=include_notice_items,

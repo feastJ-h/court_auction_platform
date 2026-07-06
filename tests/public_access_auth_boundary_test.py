@@ -104,7 +104,7 @@ def main() -> int:
     event_id, auction_item_id, raw_doc_id = seed_data()
     client = TestClient(app)
 
-    for path in ("/", "/onbid", f"/onbid/{auction_item_id}", "/cases", f"/cases/{event_id}", "/about", "/disclaimer", "/robots.txt", "/sitemap.xml"):
+    for path in ("/", "/onbid", f"/onbid/{auction_item_id}", "/cases", f"/cases/{event_id}", "/about", "/disclaimer", "/privacy", "/terms", "/robots.txt", "/sitemap.xml"):
         response = client.get(path)
         assert response.status_code == 200, f"{path}: {response.status_code}"
 

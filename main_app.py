@@ -2,6 +2,7 @@ import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
 import hmac
+from html import escape
 import json
 from math import ceil
 from zoneinfo import ZoneInfo
@@ -10,12 +11,14 @@ from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import select
 
 from backend.analysis.business_rules import evaluate_marketability
 from backend.config import PROJECT_ROOT, get_settings
 from backend.database.crud import (
     list_admin_events,
 )
+from backend.database.models import AssetEvent, AuctionItem
 from backend.database.analysis_results import (
     list_results_for_events,
     serialize_result,
@@ -404,6 +407,11 @@ def disclaimer_page(request: Request):
 
 @app.get("/privacy-draft")
 def privacy_draft_page(request: Request):
+    return RedirectResponse(url="/privacy", status_code=303)
+
+
+@app.get("/privacy")
+def privacy_page(request: Request):
     with session_scope() as session:
         return templates.TemplateResponse(
             request,
@@ -412,16 +420,60 @@ def privacy_draft_page(request: Request):
         )
 
 
+@app.get("/terms")
+def terms_page(request: Request):
+    with session_scope() as session:
+        return templates.TemplateResponse(
+            request,
+            "public/terms.html",
+            {"current_user": require_user(request, session)},
+        )
+
+
 @app.get("/robots.txt")
 def robots_txt() -> Response:
-    body = "User-agent: *\nAllow: /\nSitemap: /sitemap.xml\n"
+    body = "\n".join(
+        [
+            "User-agent: *",
+            "Allow: /",
+            "Disallow: /admin",
+            "Disallow: /api/admin",
+            "Disallow: /user",
+            "Disallow: /my",
+            "Disallow: /documents/raw",
+            "Disallow: /storage",
+            "Sitemap: /sitemap.xml",
+            "",
+        ]
+    )
     return Response(content=body, media_type="text/plain")
 
 
 @app.get("/sitemap.xml")
 def sitemap_xml() -> Response:
-    paths = ["/", "/onbid", "/cases", "/about", "/disclaimer", "/privacy-draft"]
-    urlset = "".join(f"<url><loc>{path}</loc></url>" for path in paths)
+    paths = ["/", "/onbid", "/cases", "/about", "/disclaimer", "/privacy", "/terms"]
+    with session_scope() as session:
+        onbid_ids = [
+            item_id
+            for item_id in session.scalars(
+                select(AuctionItem.id)
+                .where(AuctionItem.source == "ONBID", AuctionItem.item_name != "")
+                .order_by(AuctionItem.updated_at.desc(), AuctionItem.id.desc())
+                .limit(100)
+            )
+        ]
+        case_ids = [
+            event_id
+            for event_id in session.scalars(
+                select(AssetEvent.id)
+                .where(AssetEvent.title != "", AssetEvent.url != "")
+                .order_by(AssetEvent.notice_date.desc(), AssetEvent.id.desc())
+                .limit(100)
+            )
+        ]
+    paths.extend(f"/onbid/{item_id}" for item_id in onbid_ids)
+    paths.extend(f"/cases/{event_id}" for event_id in case_ids)
+    urlset = "".join(f"<url><loc>{escape(path)}</loc></url>" for path in paths)
     body = f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urlset}</urlset>'
     return Response(content=body, media_type="application/xml")
 
@@ -560,5 +612,3 @@ def update_admin_event_metadata(
         except ValueError as exc:
             return RedirectResponse(url=f"/admin?metadata_error={str(exc)}", status_code=303)
     return RedirectResponse(url="/admin", status_code=303)
-
-

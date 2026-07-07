@@ -10,6 +10,7 @@ from backend.onbid.client import OnbidClient, first_value, normalize_onbid_api_i
 from backend.services.auction_items import (
     evaluate_onbid_payload_freshness,
     FRESHNESS_FRESH,
+    parse_onbid_date,
     upsert_auction_item,
     upsert_auction_notice_item_link,
     upsert_auction_notice_payload,
@@ -105,6 +106,7 @@ def run_onbid_sync(
                 sample=sample,
                 include_notice_details=include_notice_details,
                 include_notice_items=include_notice_items,
+                min_date=min_date,
             )
             total_count += notice_total_count
             used_sample = used_sample or notice_used_sample
@@ -326,6 +328,7 @@ def collect_notice_pages(
     sample: bool,
     include_notice_details: bool,
     include_notice_items: bool,
+    min_date: str,
 ) -> tuple[list[dict], int, bool]:
     bundles: list[dict] = []
     total_count = 0
@@ -335,6 +338,7 @@ def collect_notice_pages(
             limit=limit,
             page_no=current_page,
             sample=sample,
+            opbd_dt_start=onbid_api_date(min_date),
         )
         total_count = max(total_count, page_total_count)
         for notice_payload in notice_payloads:
@@ -379,6 +383,11 @@ def collect_notice_pages(
         if sample or not notice_payloads or len(notice_payloads) < limit:
             break
     return bundles, total_count, used_sample
+
+
+def onbid_api_date(value: str) -> str:
+    parsed = parse_onbid_date(value)
+    return parsed.strftime("%Y%m%d") if parsed else ""
 
 
 def filter_fresh_payloads(payloads: list[dict], *, min_date: str) -> tuple[list[dict], dict[str, int]]:

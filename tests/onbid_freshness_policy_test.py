@@ -127,6 +127,7 @@ def main() -> int:
     init_db()
     seed_items()
     client = TestClient(app)
+    active_end = (date.today() + timedelta(days=30)).strftime("%Y%m%d")
 
     page = client.get("/onbid")
     assert page.status_code == 200, page.status_code
@@ -168,12 +169,15 @@ def main() -> int:
             {"cltrMngNo": "API-STALE", "pbctCdtnNo": "2", "bidStartAt": "20241231"},
             {"cltrMngNo": "API-UNKNOWN", "pbctCdtnNo": "3"},
             {"cltrMngNo": "API-SENTINEL", "pbctCdtnNo": "4", "bidStartAt": "29991231"},
+            {"cltrMngNo": "API-NATIONAL-FRESH", "pbctCdtnNo": "5", "FRST_BID_SLCTN_YMD": "20250102"},
+            {"cltrMngNo": "API-NATIONAL-STALE", "pbctCdtnNo": "6", "FRST_BID_SLCTN_YMD": "20030711"},
+            {"cltrMngNo": "API-ACTIVE-LONG", "pbctCdtnNo": "7", "bidStartAt": "20240101", "bidEndAt": active_end},
         ],
         min_date="2025-01-01",
     )
-    assert [item["cltrMngNo"] for item in accepted] == ["API-FRESH"]
-    assert summary["accepted_fresh"] == 1, summary
-    assert summary["dropped_stale"] == 1, summary
+    assert [item["cltrMngNo"] for item in accepted] == ["API-FRESH", "API-NATIONAL-FRESH", "API-ACTIVE-LONG"]
+    assert summary["accepted_fresh"] == 3, summary
+    assert summary["dropped_stale"] == 2, summary
     assert summary["dropped_unknown_date"] == 2, summary
 
     print(f"isolated_db={TEST_DB_PATH}")

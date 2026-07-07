@@ -80,10 +80,13 @@ ONBID_DATE_KEYS = (
     "openBidAt",
     "open_bid_at",
     "opengDt",
+    "cltrOpbdDt",
     "noticeDate",
     "notice_date",
     "pbancDt",
+    "pbancYmd",
     "opbdDt",
+    "FRST_BID_SLCTN_YMD",
 )
 
 REAL_ESTATE_TOKENS = (
@@ -261,10 +264,19 @@ def extract_onbid_freshness_date(payload_or_item: Any) -> str:
         raw_detail = raw_payload.get("_raw_detail") if isinstance(raw_payload.get("_raw_detail"), dict) else {}
         candidates.extend(raw_list.get(key) for key in ONBID_DATE_KEYS)
         candidates.extend(raw_detail.get(key) for key in ONBID_DATE_KEYS)
+    parsed_candidates: list[date] = []
+    invalid_candidates: list[date] = []
     for candidate in candidates:
         parsed = parse_onbid_date(candidate)
         if parsed is not None:
-            return parsed.isoformat()
+            if is_implausible_onbid_public_date(parsed):
+                invalid_candidates.append(parsed)
+            else:
+                parsed_candidates.append(parsed)
+    if parsed_candidates:
+        return max(parsed_candidates).isoformat()
+    if invalid_candidates:
+        return max(invalid_candidates).isoformat()
     return ""
 
 

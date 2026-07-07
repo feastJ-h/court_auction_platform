@@ -27,6 +27,7 @@ from backend.database.models import (
     RawDocument,
 )
 from backend.database.session import init_db, session_scope
+from backend.onbid.client import DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD, OnbidClient
 from backend.services.auth import ensure_initial_admin
 from backend.workers.onbid_sync import run_onbid_sync
 from main_app import app
@@ -98,9 +99,56 @@ def assert_onbid_sample_sync() -> None:
     assert notice_resync_result["notice_item_links_updated"] == 3, notice_resync_result
 
 
+def assert_onbid_a2_request_params() -> None:
+    client = OnbidClient()
+    captured: list[dict] = []
+
+    def fake_fetch_onbid_items(**kwargs):
+        captured.append(kwargs)
+        return [], 0
+
+    client._fetch_onbid_items = fake_fetch_onbid_items  # type: ignore[method-assign]
+    client._fetch_real_estate_items_from_api(
+        limit=20,
+        page_no=1,
+        prpt_div_cd=DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD,
+        pvct_trgt_yn="N",
+        bid_prd_ymd_start="20260707",
+        bid_prd_ymd_end="20260905",
+        mdfcn_ymd_start="",
+        mdfcn_ymd_end="",
+        bid_div_cd="",
+        dsps_mthod_cd="",
+    )
+    client._fetch_movable_items_from_api(
+        limit=20,
+        page_no=1,
+        prpt_div_cd=DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD,
+        pvct_trgt_yn="N",
+        bid_prd_ymd_start="20260707",
+        bid_prd_ymd_end="20260905",
+        mdfcn_ymd_start="",
+        mdfcn_ymd_end="",
+        bid_div_cd="",
+        dsps_mthod_cd="",
+    )
+
+    assert len(captured) == 2, captured
+    for call in captured:
+        params = call["params"]
+        assert params["prptDivCd"] == DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD, params
+        assert "0010" not in params["prptDivCd"], params
+        assert params["pvctTrgtYn"] == "N", params
+        assert params["bidPrdYmdStart"] == "20260707", params
+        assert params["bidPrdYmdEnd"] == "20260905", params
+        assert "bidDivCd" in params, params
+        assert "dspsMthodCd" in params, params
+
+
 def main() -> int:
     init_db()
     event_id = seed_case_event()
+    assert_onbid_a2_request_params()
     assert_onbid_sample_sync()
 
     with session_scope() as session:

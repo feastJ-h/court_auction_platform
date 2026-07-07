@@ -28,6 +28,7 @@ DEFAULT_NOTICE_DETAIL_BASE_URL = "https://apis.data.go.kr/B010003/OnbidPbancDtln
 DEFAULT_NOTICE_DETAIL_OPERATION = "getPbancDtlInf2"
 DEFAULT_NOTICE_CLTR_BASE_URL = "https://apis.data.go.kr/B010003/OnbidPbancCltrDtlSrvc2"
 DEFAULT_NOTICE_CLTR_OPERATION = "getPbancCltrInf2"
+DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD = "0007,0005,0004,0002,0003,0006,0008,0011,0013"
 
 
 @dataclass(frozen=True)
@@ -400,14 +401,27 @@ class OnbidClient:
         limit: int = 20,
         sample: bool = False,
         page_no: int = 1,
-        prpt_div_cd: str = "0007,0010,0005,0002,0003,0006,0008,0011,0013",
+        prpt_div_cd: str = DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD,
         pvct_trgt_yn: str = "N",
+        bid_prd_ymd_start: str = "",
+        bid_prd_ymd_end: str = "",
+        mdfcn_ymd_start: str = "",
+        mdfcn_ymd_end: str = "",
+        bid_div_cd: str = "",
+        dsps_mthod_cd: str = "",
         include_details: bool = False,
+        detail_limit: int = 1,
     ) -> tuple[list[dict[str, Any]], OnbidSyncResult]:
         if sample or not self.settings.onbid_api_key:
             items = SAMPLE_REAL_ESTATE_ITEMS[:limit]
             if include_details:
-                items = [merge_onbid_detail(item, SAMPLE_REAL_ESTATE_DETAILS.get(item["cltrMngNo"], {})) for item in items]
+                max_details = max(0, detail_limit)
+                items = [
+                    merge_onbid_detail(item, SAMPLE_REAL_ESTATE_DETAILS.get(item["cltrMngNo"], {}))
+                    if index < max_details
+                    else item
+                    for index, item in enumerate(items)
+                ]
             return items, OnbidSyncResult(fetched=len(items), source="sample", used_sample=True, total_count=len(items))
 
         raw_items, total_count = self._fetch_real_estate_items_from_api(
@@ -415,9 +429,18 @@ class OnbidClient:
             page_no=page_no,
             prpt_div_cd=prpt_div_cd,
             pvct_trgt_yn=pvct_trgt_yn,
+            bid_prd_ymd_start=bid_prd_ymd_start,
+            bid_prd_ymd_end=bid_prd_ymd_end,
+            mdfcn_ymd_start=mdfcn_ymd_start,
+            mdfcn_ymd_end=mdfcn_ymd_end,
+            bid_div_cd=bid_div_cd,
+            dsps_mthod_cd=dsps_mthod_cd,
         )
         if include_details:
-            raw_items = [self._attach_real_estate_detail(item) for item in raw_items]
+            raw_items = [
+                self._attach_real_estate_detail(item) if index < max(0, detail_limit) else item
+                for index, item in enumerate(raw_items)
+            ]
         normalized = [normalize_onbid_api_item(item, source_api="real_estate_list") for item in raw_items]
         return normalized, OnbidSyncResult(
             fetched=len(normalized),
@@ -432,11 +455,21 @@ class OnbidClient:
         limit: int = 20,
         sample: bool = False,
         page_no: int = 1,
+        prpt_div_cd: str = DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD,
+        pvct_trgt_yn: str = "N",
+        bid_prd_ymd_start: str = "",
+        bid_prd_ymd_end: str = "",
+        mdfcn_ymd_start: str = "",
+        mdfcn_ymd_end: str = "",
+        bid_div_cd: str = "",
+        dsps_mthod_cd: str = "",
         include_details: bool = False,
+        detail_limit: int = 1,
     ) -> tuple[list[dict[str, Any]], OnbidSyncResult]:
         if sample or not self.settings.onbid_api_key:
             items = SAMPLE_MOVABLE_ITEMS[:limit]
             if include_details:
+                max_details = max(0, detail_limit)
                 items = [
                     merge_onbid_detail(
                         item,
@@ -446,12 +479,28 @@ class OnbidClient:
                             sample=True,
                         ),
                     )
-                    for item in items
+                    if index < max_details
+                    else item
+                    for index, item in enumerate(items)
                 ]
             return items, OnbidSyncResult(fetched=len(items), source="sample", used_sample=True, total_count=len(items))
-        raw_items, total_count = self._fetch_movable_items_from_api(limit=limit, page_no=page_no)
+        raw_items, total_count = self._fetch_movable_items_from_api(
+            limit=limit,
+            page_no=page_no,
+            prpt_div_cd=prpt_div_cd,
+            pvct_trgt_yn=pvct_trgt_yn,
+            bid_prd_ymd_start=bid_prd_ymd_start,
+            bid_prd_ymd_end=bid_prd_ymd_end,
+            mdfcn_ymd_start=mdfcn_ymd_start,
+            mdfcn_ymd_end=mdfcn_ymd_end,
+            bid_div_cd=bid_div_cd,
+            dsps_mthod_cd=dsps_mthod_cd,
+        )
         if include_details:
-            raw_items = [self._attach_movable_detail(item) for item in raw_items]
+            raw_items = [
+                self._attach_movable_detail(item) if index < max(0, detail_limit) else item
+                for index, item in enumerate(raw_items)
+            ]
         normalized = [normalize_onbid_api_item(item, default_asset_type="동산", source_api="movable_list") for item in raw_items]
         return normalized, OnbidSyncResult(
             fetched=len(normalized),
@@ -637,6 +686,12 @@ class OnbidClient:
         page_no: int,
         prpt_div_cd: str,
         pvct_trgt_yn: str,
+        bid_prd_ymd_start: str,
+        bid_prd_ymd_end: str,
+        mdfcn_ymd_start: str,
+        mdfcn_ymd_end: str,
+        bid_div_cd: str,
+        dsps_mthod_cd: str,
     ) -> tuple[list[dict[str, Any]], int]:
         return self._fetch_onbid_items(
             base_url=self.settings.onbid_api_base_url or DEFAULT_REAL_ESTATE_LIST_BASE_URL,
@@ -644,16 +699,44 @@ class OnbidClient:
             params={
                 "prptDivCd": prpt_div_cd,
                 "pvctTrgtYn": pvct_trgt_yn,
+                "bidPrdYmdStart": bid_prd_ymd_start,
+                "bidPrdYmdEnd": bid_prd_ymd_end,
+                "mdfcnYmdStart": mdfcn_ymd_start,
+                "mdfcnYmdEnd": mdfcn_ymd_end,
+                "bidDivCd": bid_div_cd,
+                "dspsMthodCd": dsps_mthod_cd,
             },
             limit=limit,
             page_no=page_no,
         )
 
-    def _fetch_movable_items_from_api(self, *, limit: int, page_no: int) -> tuple[list[dict[str, Any]], int]:
+    def _fetch_movable_items_from_api(
+        self,
+        *,
+        limit: int,
+        page_no: int,
+        prpt_div_cd: str,
+        pvct_trgt_yn: str,
+        bid_prd_ymd_start: str,
+        bid_prd_ymd_end: str,
+        mdfcn_ymd_start: str,
+        mdfcn_ymd_end: str,
+        bid_div_cd: str,
+        dsps_mthod_cd: str,
+    ) -> tuple[list[dict[str, Any]], int]:
         return self._fetch_onbid_items(
             base_url=self.settings.onbid_movable_api_base_url or DEFAULT_MOVABLE_LIST_BASE_URL,
             operation=self.settings.onbid_movable_list_operation or DEFAULT_MOVABLE_LIST_OPERATION,
-            params={},
+            params={
+                "prptDivCd": prpt_div_cd,
+                "pvctTrgtYn": pvct_trgt_yn,
+                "bidPrdYmdStart": bid_prd_ymd_start,
+                "bidPrdYmdEnd": bid_prd_ymd_end,
+                "mdfcnYmdStart": mdfcn_ymd_start,
+                "mdfcnYmdEnd": mdfcn_ymd_end,
+                "bidDivCd": bid_div_cd,
+                "dspsMthodCd": dsps_mthod_cd,
+            },
             limit=limit,
             page_no=page_no,
         )

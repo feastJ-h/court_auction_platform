@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 from backend.database.session import init_db, session_scope
 from backend.database.models import CrawlRun
-from backend.onbid.client import OnbidClient, first_value, normalize_onbid_api_item
+from backend.onbid.client import DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD, OnbidClient, first_value, normalize_onbid_api_item
 from backend.services.auction_items import (
     evaluate_onbid_payload_freshness,
     FRESHNESS_FRESH,
@@ -27,10 +27,17 @@ def run_onbid_sync(
     log_path: str = "",
     page_no: int = 1,
     max_pages: int = 1,
-    prpt_div_cd: str = "0007,0010,0005,0002,0003,0006,0008,0011,0013",
+    prpt_div_cd: str = DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD,
     pvct_trgt_yn: str = "N",
+    bid_prd_ymd_start: str = "",
+    bid_prd_ymd_end: str = "",
+    mdfcn_ymd_start: str = "",
+    mdfcn_ymd_end: str = "",
+    bid_div_cd: str = "",
+    dsps_mthod_cd: str = "",
     api_kind: str = "real_estate",
     include_details: bool = False,
+    detail_limit: int = 1,
     include_notice_details: bool = False,
     include_notice_items: bool = False,
     run_type: str = "",
@@ -66,7 +73,14 @@ def run_onbid_sync(
                 sample=sample,
                 prpt_div_cd=prpt_div_cd,
                 pvct_trgt_yn=pvct_trgt_yn,
+                bid_prd_ymd_start=bid_prd_ymd_start,
+                bid_prd_ymd_end=bid_prd_ymd_end,
+                mdfcn_ymd_start=mdfcn_ymd_start,
+                mdfcn_ymd_end=mdfcn_ymd_end,
+                bid_div_cd=bid_div_cd,
+                dsps_mthod_cd=dsps_mthod_cd,
                 include_details=include_details,
+                detail_limit=detail_limit,
             )
             payloads.extend(real_estate_payloads)
             total_count += real_estate_total_count
@@ -79,7 +93,16 @@ def run_onbid_sync(
                 page_no=page_no,
                 max_pages=max_pages,
                 sample=sample,
+                prpt_div_cd=prpt_div_cd,
+                pvct_trgt_yn=pvct_trgt_yn,
+                bid_prd_ymd_start=bid_prd_ymd_start,
+                bid_prd_ymd_end=bid_prd_ymd_end,
+                mdfcn_ymd_start=mdfcn_ymd_start,
+                mdfcn_ymd_end=mdfcn_ymd_end,
+                bid_div_cd=bid_div_cd,
+                dsps_mthod_cd=dsps_mthod_cd,
                 include_details=include_details,
+                detail_limit=detail_limit,
             )
             payloads.extend(movable_payloads)
             total_count += movable_total_count
@@ -167,6 +190,7 @@ def run_onbid_sync(
             "run_id": run_id,
             "api_kind": api_kind,
             "include_details": include_details,
+            "detail_limit": detail_limit,
             "include_notice_details": include_notice_details,
             "include_notice_items": include_notice_items,
             "max_pages": max(1, max_pages),
@@ -202,10 +226,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--limit", type=int, default=20)
     parser.add_argument("--page-no", type=int, default=1)
     parser.add_argument("--max-pages", type=int, default=1)
-    parser.add_argument("--prpt-div-cd", default="0007,0010,0005,0002,0003,0006,0008,0011,0013")
+    parser.add_argument("--prpt-div-cd", default=DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD)
     parser.add_argument("--pvct-trgt-yn", default="N")
+    parser.add_argument("--bid-prd-ymd-start", default="")
+    parser.add_argument("--bid-prd-ymd-end", default="")
+    parser.add_argument("--mdfcn-ymd-start", default="")
+    parser.add_argument("--mdfcn-ymd-end", default="")
+    parser.add_argument("--bid-div-cd", default="")
+    parser.add_argument("--dsps-mthod-cd", default="")
     parser.add_argument("--api-kind", choices=("real_estate", "movable", "all", "notice", "national_property"), default="real_estate")
     parser.add_argument("--include-details", action="store_true")
+    parser.add_argument("--detail-limit", type=int, default=1)
     parser.add_argument("--include-notice-details", action="store_true")
     parser.add_argument("--include-notice-items", action="store_true")
     parser.add_argument("--sample", action="store_true")
@@ -225,8 +256,15 @@ def main() -> int:
         max_pages=args.max_pages,
         prpt_div_cd=args.prpt_div_cd,
         pvct_trgt_yn=args.pvct_trgt_yn,
+        bid_prd_ymd_start=args.bid_prd_ymd_start,
+        bid_prd_ymd_end=args.bid_prd_ymd_end,
+        mdfcn_ymd_start=args.mdfcn_ymd_start,
+        mdfcn_ymd_end=args.mdfcn_ymd_end,
+        bid_div_cd=args.bid_div_cd,
+        dsps_mthod_cd=args.dsps_mthod_cd,
         api_kind=args.api_kind,
         include_details=args.include_details,
+        detail_limit=args.detail_limit,
         include_notice_details=args.include_notice_details,
         include_notice_items=args.include_notice_items,
         run_type=args.run_type,
@@ -245,7 +283,14 @@ def collect_real_estate_pages(
     sample: bool,
     prpt_div_cd: str,
     pvct_trgt_yn: str,
+    bid_prd_ymd_start: str,
+    bid_prd_ymd_end: str,
+    mdfcn_ymd_start: str,
+    mdfcn_ymd_end: str,
+    bid_div_cd: str,
+    dsps_mthod_cd: str,
     include_details: bool,
+    detail_limit: int,
 ) -> tuple[list[dict], int, bool]:
     payloads: list[dict] = []
     total_count = 0
@@ -257,7 +302,14 @@ def collect_real_estate_pages(
             page_no=current_page,
             prpt_div_cd=prpt_div_cd,
             pvct_trgt_yn=pvct_trgt_yn,
+            bid_prd_ymd_start=bid_prd_ymd_start,
+            bid_prd_ymd_end=bid_prd_ymd_end,
+            mdfcn_ymd_start=mdfcn_ymd_start,
+            mdfcn_ymd_end=mdfcn_ymd_end,
+            bid_div_cd=bid_div_cd,
+            dsps_mthod_cd=dsps_mthod_cd,
             include_details=include_details,
+            detail_limit=detail_limit,
         )
         payloads.extend(page_payloads)
         total_count = max(total_count, fetch_result.total_count)
@@ -274,7 +326,16 @@ def collect_movable_pages(
     page_no: int,
     max_pages: int,
     sample: bool,
+    prpt_div_cd: str,
+    pvct_trgt_yn: str,
+    bid_prd_ymd_start: str,
+    bid_prd_ymd_end: str,
+    mdfcn_ymd_start: str,
+    mdfcn_ymd_end: str,
+    bid_div_cd: str,
+    dsps_mthod_cd: str,
     include_details: bool,
+    detail_limit: int,
 ) -> tuple[list[dict], int, bool]:
     payloads: list[dict] = []
     total_count = 0
@@ -284,7 +345,16 @@ def collect_movable_pages(
             limit=limit,
             sample=sample,
             page_no=current_page,
+            prpt_div_cd=prpt_div_cd,
+            pvct_trgt_yn=pvct_trgt_yn,
+            bid_prd_ymd_start=bid_prd_ymd_start,
+            bid_prd_ymd_end=bid_prd_ymd_end,
+            mdfcn_ymd_start=mdfcn_ymd_start,
+            mdfcn_ymd_end=mdfcn_ymd_end,
+            bid_div_cd=bid_div_cd,
+            dsps_mthod_cd=dsps_mthod_cd,
             include_details=include_details,
+            detail_limit=detail_limit,
         )
         payloads.extend(page_payloads)
         total_count = max(total_count, fetch_result.total_count)

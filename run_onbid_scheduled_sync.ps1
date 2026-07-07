@@ -5,9 +5,19 @@ param(
     [int]$PageNo = 1,
     [int]$MaxPages = 1,
     [string]$MinDate = "2025-01-01",
+    [string]$PrptDivCd = "0007,0005,0004,0002,0003,0006,0008,0011,0013",
+    [ValidateSet("Y", "N")]
+    [string]$PvctTrgtYn = "N",
+    [string]$BidPrdYmdStart = "",
+    [string]$BidPrdYmdEnd = "",
+    [string]$MdfcnYmdStart = "",
+    [string]$MdfcnYmdEnd = "",
+    [string]$BidDivCd = "",
+    [string]$DspsMthodCd = "",
     [ValidateSet("real_estate", "movable", "all", "notice", "national_property")]
     [string]$ApiKind = "all",
     [switch]$IncludeDetails,
+    [int]$DetailLimit = 1,
     [switch]$IncludeNoticeDetails,
     [switch]$IncludeNoticeItems,
     [switch]$Sample
@@ -19,6 +29,7 @@ if (-not $Sample) {
     if ($Limit -gt 20) { throw "Real ONBID sync is limited to Limit=20 in v005." }
     if ($MaxPages -gt 1) { throw "Real ONBID sync is limited to MaxPages=1 in v005." }
     if ($MinDate -ne "2025-01-01") { throw "Real ONBID sync requires MinDate=2025-01-01 in v005." }
+    if ($DetailLimit -gt 1) { throw "Real ONBID sync is limited to DetailLimit=1 in v006-a2." }
 }
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -50,9 +61,30 @@ try {
         "--max-pages", "$MaxPages",
         "--api-kind", $ApiKind,
         "--min-date", $MinDate,
+        "--prpt-div-cd", $PrptDivCd,
+        "--pvct-trgt-yn", $PvctTrgtYn,
+        "--detail-limit", "$DetailLimit",
         "--run-type", $resolvedRunType,
         "--log-path", $LogPath
     )
+    if ($BidPrdYmdStart) {
+        $arguments += @("--bid-prd-ymd-start", $BidPrdYmdStart)
+    }
+    if ($BidPrdYmdEnd) {
+        $arguments += @("--bid-prd-ymd-end", $BidPrdYmdEnd)
+    }
+    if ($MdfcnYmdStart) {
+        $arguments += @("--mdfcn-ymd-start", $MdfcnYmdStart)
+    }
+    if ($MdfcnYmdEnd) {
+        $arguments += @("--mdfcn-ymd-end", $MdfcnYmdEnd)
+    }
+    if ($BidDivCd) {
+        $arguments += @("--bid-div-cd", $BidDivCd)
+    }
+    if ($DspsMthodCd) {
+        $arguments += @("--dsps-mthod-cd", $DspsMthodCd)
+    }
     if ($IncludeDetails) {
         $arguments += "--include-details"
     }
@@ -66,7 +98,7 @@ try {
         $arguments += "--sample"
     }
 
-    "[$(Get-Date -Format o)] onbid scheduled sync start RunType=$RunType ResolvedRunType=$resolvedRunType Limit=$Limit PageNo=$PageNo MaxPages=$MaxPages MinDate=$MinDate ApiKind=$ApiKind IncludeDetails=$IncludeDetails IncludeNoticeDetails=$IncludeNoticeDetails IncludeNoticeItems=$IncludeNoticeItems Sample=$Sample" | Out-File -FilePath $LogPath -Encoding utf8
+    "[$(Get-Date -Format o)] onbid scheduled sync start RunType=$RunType ResolvedRunType=$resolvedRunType Limit=$Limit PageNo=$PageNo MaxPages=$MaxPages MinDate=$MinDate ApiKind=$ApiKind PrptDivCd=$PrptDivCd PvctTrgtYn=$PvctTrgtYn BidPrdYmdStart=$BidPrdYmdStart BidPrdYmdEnd=$BidPrdYmdEnd IncludeDetails=$IncludeDetails DetailLimit=$DetailLimit IncludeNoticeDetails=$IncludeNoticeDetails IncludeNoticeItems=$IncludeNoticeItems Sample=$Sample" | Out-File -FilePath $LogPath -Encoding utf8
     $processOutput = & $PythonExe @arguments 2>&1
     $exitCode = $LASTEXITCODE
     $processOutput | Out-File -FilePath $LogPath -Append -Encoding utf8

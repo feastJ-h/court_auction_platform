@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from math import ceil
 from urllib.parse import urlencode
 from fastapi import Body, FastAPI, Form, HTTPException, Query, Request
@@ -23,6 +24,13 @@ from backend.services.auction_items import (
     serialize_auction_item,
 )
 from backend.services.audit_logs import create_audit_log
+from backend.services.product_engagement import (
+    create_data_issue_report,
+    create_review_summary_share,
+    get_review_summary_share,
+    parse_share_summary,
+    record_product_event,
+)
 from backend.services.user_auction_preferences import (
     get_preference,
     get_preference_map,
@@ -75,6 +83,7 @@ def build_category_links(base_path: str, filters: dict, counts: dict[str, int]) 
                 region=filters.get("region"),
                 price_min=filters.get("price_min"),
                 price_max=filters.get("price_max"),
+                data_quality=filters.get("data_quality"),
             ),
         }
         for value, label in labels.items()
@@ -121,6 +130,34 @@ def register_auction_routes(
             return maximum
         return parsed
 
+    def _analytics_session_id(request: Request) -> str:
+        session_cookie = request.cookies.get("court_session") or ""
+        if session_cookie:
+            return session_cookie[:128]
+        return request.cookies.get("session") or ""
+
+    def _is_today_review_item(view: dict) -> bool:
+        return view.get("freshness_date") == date.today().isoformat()
+
+    def _today_review_state(item_views: list[dict]) -> dict:
+        today_items = [view for view in item_views if _is_today_review_item(view)]
+        if not today_items:
+            today_items = item_views[:20]
+        passed = [view for view in today_items if view.get("preference", {}).get("is_passed")]
+        favorited = [view for view in today_items if view.get("preference", {}).get("is_favorite")]
+        remaining = [
+            view
+            for view in today_items
+            if not view.get("preference", {}).get("is_passed") and not view.get("preference", {}).get("is_favorite")
+        ]
+        return {
+            "items": remaining,
+            "total": len(today_items),
+            "passed": len(passed),
+            "favorited": len(favorited),
+            "complete": bool(today_items) and not remaining,
+        }
+
     def _render_auction_list(
         request: Request,
         *,
@@ -138,6 +175,7 @@ def register_auction_routes(
         min_discount_rate: float | None,
         has_notice: str,
         has_detail: str,
+        data_quality: str,
         category: str,
         notice_id: int | None,
         pbanc_mng_no: str,
@@ -164,6 +202,7 @@ def register_auction_routes(
                 min_discount_rate=_read_float(min_discount_rate, maximum=100),
                 has_notice=has_notice,
                 has_detail=has_detail,
+                data_quality=data_quality,
                 category=category,
                 public_only=public_only,
                 notice_id=_read_int(notice_id, minimum=1),
@@ -186,6 +225,7 @@ def register_auction_routes(
                 min_discount_rate=_read_float(min_discount_rate, maximum=100),
                 has_notice=has_notice,
                 has_detail=has_detail,
+                data_quality=data_quality,
                 category=category,
                 public_only=public_only,
                 notice_id=_read_int(notice_id, minimum=1),
@@ -216,6 +256,7 @@ def register_auction_routes(
                 "min_discount_rate": _read_float(min_discount_rate, maximum=100) or "",
                 "has_notice": has_notice,
                 "has_detail": has_detail,
+                "data_quality": data_quality,
                 "category": category,
                 "notice_id": _read_int(notice_id, minimum=1) or "",
                 "pbanc_mng_no": pbanc_mng_no,
@@ -247,12 +288,12 @@ def register_auction_routes(
                         "has_next": current_page < total_pages,
                         "prev_page": max(1, current_page - 1),
                         "next_page": min(total_pages, current_page + 1),
-                        "prev_href": build_query_href(base_path, page=max(1, current_page - 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"]),
-                        "next_href": build_query_href(base_path, page=min(total_pages, current_page + 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"]),
+                        "prev_href": build_query_href(base_path, page=max(1, current_page - 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"], data_quality=filters["data_quality"]),
+                        "next_href": build_query_href(base_path, page=min(total_pages, current_page + 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"], data_quality=filters["data_quality"]),
                         "page_links": [
                             {
                                 "page": p,
-                                "href": build_query_href(base_path, page=p, region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"]),
+                                "href": build_query_href(base_path, page=p, region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"], data_quality=filters["data_quality"]),
                             }
                             for p in range(1, total_pages + 1)
                         ],
@@ -279,6 +320,7 @@ def register_auction_routes(
         min_discount_rate: str = Query(""),
         has_notice: str = Query("ALL"),
         has_detail: str = Query("ALL"),
+        data_quality: str = Query("ALL"),
         category: str = Query("all"),
         notice_id: str = Query(""),
         pbanc_mng_no: str = Query(""),
@@ -300,6 +342,7 @@ def register_auction_routes(
             min_discount_rate=min_discount_rate,
             has_notice=has_notice,
             has_detail=has_detail,
+            data_quality=data_quality,
             category=category,
             notice_id=notice_id,
             pbanc_mng_no=pbanc_mng_no,
@@ -325,6 +368,7 @@ def register_auction_routes(
         min_discount_rate: str = Query(""),
         has_notice: str = Query("ALL"),
         has_detail: str = Query("ALL"),
+        data_quality: str = Query("ALL"),
         category: str = Query("all"),
         notice_id: str = Query(""),
         pbanc_mng_no: str = Query(""),
@@ -346,12 +390,66 @@ def register_auction_routes(
             min_discount_rate=min_discount_rate,
             has_notice=has_notice,
             has_detail=has_detail,
+            data_quality=data_quality,
             category=category,
             notice_id=notice_id,
             pbanc_mng_no=pbanc_mng_no,
             sort=sort,
             base_path="/onbid",
         )
+
+    @app.get("/onbid/today")
+    def onbid_today_page(request: Request):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            items = list_auction_items(
+                session,
+                public_only=True,
+                sort="newest",
+                limit=200,
+                offset=0,
+            )
+            item_views = [serialize_auction_item(item) for item in items]
+            preferences = (
+                get_preference_map(session, current_user.id, [item.id for item in items])
+                if current_user
+                else {}
+            )
+            for view in item_views:
+                view["preference"] = serialize_preference(preferences.get(view["id"]))
+            today_review = _today_review_state(item_views)
+            record_product_event(
+                session,
+                "view_today_queue",
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+                metadata={"total": today_review["total"], "remaining": len(today_review["items"])},
+            )
+            if today_review["complete"]:
+                record_product_event(
+                    session,
+                    "complete_today_review",
+                    user_id=current_user.id if current_user else None,
+                    session_id=_analytics_session_id(request),
+                    metadata={"total": today_review["total"], "passed": today_review["passed"], "favorited": today_review["favorited"]},
+                )
+            return templates.TemplateResponse(
+                request,
+                "auctions/today.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "onbid",
+                    "active_subsection": "today",
+                    "active_category": "",
+                    "page_title": "오늘 보기",
+                    "breadcrumbs": [{"label": "ONBID", "href": "/onbid"}, {"label": "오늘 보기", "href": "/onbid/today"}],
+                    "review_mode": get_settings().review_mode,
+                    "items": today_review["items"],
+                    "today_review": today_review,
+                    "base_path": "/onbid",
+                },
+            )
 
     @app.get("/auctions/{auction_item_id}")
     def auction_detail_page(request: Request, auction_item_id: int):
@@ -371,6 +469,16 @@ def register_auction_routes(
                 raise HTTPException(status_code=404, detail="Auction item not found.")
             preference = get_preference(session, current_user.id, auction_item_id) if current_user else None
             same_notice_items = [serialize_auction_item(other) for other in list_same_notice_items(session, item, limit=20)]
+            view = serialize_auction_item(item)
+            if base_path == "/onbid" and view["supports_development_insight"]:
+                record_product_event(
+                    session,
+                    "view_development_insight_cta",
+                    auction_item_id=item.id,
+                    user_id=current_user.id if current_user else None,
+                    session_id=_analytics_session_id(request),
+                    category=view["category"],
+                )
             return templates.TemplateResponse(
                 request,
                 "auctions/detail.html",
@@ -379,7 +487,7 @@ def register_auction_routes(
                     "settings": get_settings(),
                     "active_section": "onbid",
                     "active_subsection": "",
-                    "active_category": serialize_auction_item(item)["category"],
+                    "active_category": view["category"],
                 "page_title": item.item_name or "온비드 상세",
                     "breadcrumbs": [
                         {"label": "ONBID", "href": base_path},
@@ -387,10 +495,12 @@ def register_auction_routes(
                     ],
                     "review_mode": get_settings().review_mode,
                     "item": item,
-                    "view": serialize_auction_item(item),
+                    "view": view,
                     "same_notice_items": same_notice_items,
                     "preference": serialize_preference(preference),
                     "base_path": base_path,
+                    "issue_submitted": request.query_params.get("issue_reported") == "1",
+                    "share_created": request.query_params.get("share") or "",
                 },
             )
 
@@ -415,9 +525,10 @@ def register_auction_routes(
             current_user = require_user(request, session)
             if current_user is None:
                 return login_redirect(next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}")
-            if get_auction_item(session, auction_item_id) is None:
+            item = get_auction_item(session, auction_item_id)
+            if item is None:
                 raise HTTPException(status_code=404, detail="Auction item not found.")
-            update_preference(
+            preference = update_preference(
                 session,
                 current_user.id,
                 auction_item_id,
@@ -436,6 +547,31 @@ def register_auction_routes(
                 "User saved ONBID preference",
                 {"favorite": favorite, "passed": passed, "watching": watching},
             )
+            event_name = None
+            if favorite is True:
+                event_name = "favorite_item"
+            elif passed is True:
+                event_name = "pass_item"
+            elif passed is False:
+                event_name = "undo_pass_item"
+            elif watching is True:
+                event_name = "watch_item"
+            elif note is not None:
+                event_name = "write_memo"
+            if event_name:
+                record_product_event(
+                    session,
+                    event_name,
+                    auction_item_id=auction_item_id,
+                    user_id=current_user.id,
+                    session_id=_analytics_session_id(request),
+                    category=serialize_auction_item(item)["category"],
+                    metadata={
+                        "favorite": preference.is_favorite,
+                        "passed": preference.is_passed,
+                        "watching": preference.is_watching,
+                    },
+                )
         return _redirect_after_preference(next_url, auction_item_id)
 
     @app.post("/onbid/{auction_item_id}/preference")
@@ -467,7 +603,8 @@ def register_auction_routes(
             current_user = require_user(request, session)
             if current_user is None:
                 raise HTTPException(status_code=401, detail="Login required.")
-            if get_auction_item(session, auction_item_id) is None:
+            item = get_auction_item(session, auction_item_id)
+            if item is None:
                 raise HTTPException(status_code=404, detail="Auction item not found.")
             preference = update_preference(
                 session,
@@ -479,7 +616,208 @@ def register_auction_routes(
                 note=payload.get("note") if "note" in payload else None,
                 tags=payload.get("tags") if "tags" in payload else None,
             )
+            event_name = None
+            if payload.get("favorite") is True:
+                event_name = "favorite_item"
+            elif payload.get("passed") is True:
+                event_name = "pass_item"
+            elif payload.get("passed") is False:
+                event_name = "undo_pass_item"
+            elif payload.get("watching") is True:
+                event_name = "watch_item"
+            elif "note" in payload:
+                event_name = "write_memo"
+            if event_name:
+                record_product_event(
+                    session,
+                    event_name,
+                    auction_item_id=auction_item_id,
+                    user_id=current_user.id,
+                    session_id=_analytics_session_id(request),
+                    category=serialize_auction_item(item)["category"],
+                    metadata={
+                        "favorite": preference.is_favorite,
+                        "passed": preference.is_passed,
+                        "watching": preference.is_watching,
+                    },
+                )
             return {"status": "saved", "preference": serialize_preference(preference)}
+
+    @app.get("/onbid/{auction_item_id}/original-link")
+    def open_onbid_original_link(request: Request, auction_item_id: int):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            item = get_auction_item(session, auction_item_id)
+            if item is None or not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            view = serialize_auction_item(item)
+            if not view["external_url"]:
+                raise HTTPException(status_code=404, detail="Original link not available.")
+            record_product_event(
+                session,
+                "click_original_link",
+                auction_item_id=auction_item_id,
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+                category=view["category"],
+            )
+            return RedirectResponse(url=view["external_url"], status_code=303)
+
+    @app.post("/onbid/{auction_item_id}/issue-report")
+    def submit_onbid_issue_report(
+        request: Request,
+        auction_item_id: int,
+        issue_type: list[str] = Form([]),
+        note: str = Form(""),
+        next_url: str = Form(""),
+    ):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            item = get_auction_item(session, auction_item_id)
+            if item is None or not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            create_data_issue_report(
+                session,
+                auction_item_id=auction_item_id,
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+                issue_types=issue_type,
+                note=note,
+            )
+            create_audit_log(
+                session,
+                current_user.id if current_user else None,
+                "ONBID_DATA_ISSUE_REPORTED",
+                "auction_item",
+                auction_item_id,
+                "ONBID data issue report submitted",
+                {"issue_type_count": len(issue_type)},
+            )
+        target = next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}"
+        sep = "&" if "?" in target else "?"
+        return RedirectResponse(url=f"{target}{sep}issue_reported=1", status_code=303)
+
+    @app.post("/onbid/{auction_item_id}/review-summary")
+    def create_onbid_review_summary(
+        request: Request,
+        auction_item_id: int,
+        public_note: str = Form(""),
+    ):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            if current_user is None:
+                return login_redirect(f"/onbid/{auction_item_id}")
+            item = get_auction_item(session, auction_item_id)
+            if item is None or not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            share = create_review_summary_share(
+                session,
+                item=item,
+                user_id=current_user.id,
+                session_id=_analytics_session_id(request),
+                public_note=public_note,
+            )
+            token = share.token
+        return RedirectResponse(url=f"/onbid/{auction_item_id}?share={token}", status_code=303)
+
+    @app.get("/onbid/share/{token}")
+    def read_onbid_review_summary(request: Request, token: str):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            share = get_review_summary_share(session, token)
+            if share is None:
+                raise HTTPException(status_code=404, detail="Shared summary not found.")
+            item = get_auction_item(session, share.auction_item_id)
+            if item is None or not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Shared summary not found.")
+            payload = parse_share_summary(share)
+            record_product_event(
+                session,
+                "open_shared_summary",
+                auction_item_id=item.id,
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+                category=serialize_auction_item(item)["category"],
+            )
+            response = templates.TemplateResponse(
+                request,
+                "auctions/shared_summary.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "onbid",
+                    "active_subsection": "share",
+                    "active_category": "",
+                    "breadcrumbs": [{"label": "ONBID", "href": "/onbid"}, {"label": "검색 공유 요약", "href": ""}],
+                    "review_mode": get_settings().review_mode,
+                    "share": share,
+                    "summary": payload,
+                    "view": serialize_auction_item(item),
+                },
+            )
+            response.headers["X-Robots-Tag"] = "noindex, noarchive"
+            return response
+
+    @app.post("/onbid/share/{token}/copy")
+    def copy_onbid_review_summary_link(request: Request, token: str):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            share = get_review_summary_share(session, token)
+            if share is None:
+                raise HTTPException(status_code=404, detail="Shared summary not found.")
+            record_product_event(
+                session,
+                "copy_shared_summary_link",
+                auction_item_id=share.auction_item_id,
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+            )
+        return RedirectResponse(url=f"/onbid/share/{token}", status_code=303)
+
+    @app.post("/onbid/{auction_item_id}/development-insight")
+    def click_development_insight(request: Request, auction_item_id: int):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            item = get_auction_item(session, auction_item_id)
+            if item is None or not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            view = serialize_auction_item(item)
+            if not view["supports_development_insight"]:
+                raise HTTPException(status_code=404, detail="Development insight is not available.")
+            record_product_event(
+                session,
+                "click_development_insight_cta",
+                auction_item_id=auction_item_id,
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+                category=view["category"],
+            )
+        return RedirectResponse(url=f"/onbid/{auction_item_id}/development-insight", status_code=303)
+
+    @app.get("/onbid/{auction_item_id}/development-insight")
+    def development_insight_page(request: Request, auction_item_id: int):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            item = get_auction_item(session, auction_item_id)
+            if item is None or not is_onbid_item_public_visible(item):
+                raise HTTPException(status_code=404, detail="Auction item not found.")
+            view = serialize_auction_item(item)
+            if not view["supports_development_insight"]:
+                raise HTTPException(status_code=404, detail="Development insight is not available.")
+            return templates.TemplateResponse(
+                request,
+                "auctions/development_insight.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "onbid",
+                    "active_subsection": "development_insight",
+                    "active_category": view["category"],
+                    "breadcrumbs": [{"label": "ONBID", "href": "/onbid"}, {"label": view["item_name"], "href": f"/onbid/{auction_item_id}"}, {"label": "개발 가능성 기초 검토", "href": ""}],
+                    "review_mode": get_settings().review_mode,
+                    "view": view,
+                },
+            )
 
     def _render_my_onbid(request: Request, preference_type: str, title: str, description: str):
         with session_scope() as session:
@@ -525,6 +863,10 @@ def register_auction_routes(
     @app.get("/my/onbid/watching")
     def my_onbid_watching(request: Request):
         return _render_my_onbid(request, "watching", "감시 중인 온비드", "입찰 일정과 상태를 추적할 온비드 공매 물건입니다.")
+
+    @app.get("/my/onbid/notes")
+    def my_onbid_notes(request: Request):
+        return _render_my_onbid(request, "notes", "메모 있는 물건", "검토 이유를 남긴 온비드 공매 물건입니다.")
 
     @app.post("/api/admin/auctions/onbid/sync")
     def sync_onbid_auctions_api(

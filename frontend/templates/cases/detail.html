@@ -38,9 +38,9 @@
           <a class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" href="{{ case.external_url }}" target="_blank" rel="noopener noreferrer">원문 보기</a>
         {% endif %}
         {% if current_user %}
-          <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-800" href="/user">내 분석 목록에서 확인</a>
+          <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-800" href="/user">내 원문 확인 목록에서 확인</a>
         {% else %}
-          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="/login?next=/cases/{{ case.id }}">AI 분석 확인은 로그인 후 가능합니다.</a>
+          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="/login?next=/cases/{{ case.id }}">원문 확인 포인트는 로그인 후 볼 수 있습니다.</a>
         {% endif %}
       </div>
     </section>

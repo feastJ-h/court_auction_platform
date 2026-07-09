@@ -17,8 +17,13 @@
       <p class="mt-2 text-sm text-zinc-600">ONBID 물건은 공개 기준을 통과한 항목만 표시됩니다.</p>
     </header>
 
+    <nav class="mb-4 flex flex-wrap gap-2 text-sm font-bold" data-onbid-quick-nav="true">
+      <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid/today">오늘 보기</a>
+      <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/my/onbid/favorites">내 검색함</a>
+    </nav>
+
     <form class="mb-4 rounded-md border border-zinc-200 bg-white p-4" action="{{ base_path }}" data-nav-scope="local-filter" data-active-section="{{ active_section|default('') }}" data-active-category="{{ active_category|default('') }}">
-      <div class="grid gap-2 md:grid-cols-[150px_170px_130px_130px_auto]">
+      <div class="grid gap-2 md:grid-cols-[150px_170px_170px_130px_130px_auto]">
         <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="region" value="{{ filters.region }}" placeholder="지역">
         <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="category">
           <option value="all" {% if filters.category == 'all' %}selected{% endif %}>전체</option>
@@ -26,6 +31,10 @@
           <option value="movable" {% if filters.category == 'movable' %}selected{% endif %}>동산</option>
           <option value="national_property" {% if filters.category == 'national_property' %}selected{% endif %}>국유일반재산</option>
           <option value="other" {% if filters.category == 'other' %}selected{% endif %}>기타</option>
+        </select>
+        <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="data_quality" data-data-quality-filter="true">
+          <option value="ALL" {% if filters.data_quality == 'ALL' %}selected{% endif %}>자료 상태 전체</option>
+          <option value="needs_confirmation" {% if filters.data_quality == 'needs_confirmation' %}selected{% endif %}>자료 확인 필요</option>
         </select>
         <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="price_min" value="{{ filters.price_min }}" placeholder="최소가">
         <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="price_max" value="{{ filters.price_max }}" placeholder="최대가">

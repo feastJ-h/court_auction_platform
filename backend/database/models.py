@@ -358,6 +358,49 @@ class UserAuctionPreference(Base):
     auction_item: Mapped[AuctionItem] = relationship(back_populates="user_preferences")
 
 
+class ProductAnalyticsEvent(Base):
+    __tablename__ = "product_analytics_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    event_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    auction_item_id: Mapped[int | None] = mapped_column(ForeignKey("auction_items.id"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    session_id: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    metadata_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OnbidDataIssueReport(Base):
+    __tablename__ = "onbid_data_issue_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    auction_item_id: Mapped[int] = mapped_column(ForeignKey("auction_items.id"), nullable=False, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    reporter_session_id: Mapped[str] = mapped_column(String(128), nullable=False, default="", index=True)
+    issue_types_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    contains_personal_info: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class OnbidReviewSummaryShare(Base):
+    __tablename__ = "onbid_review_summary_shares"
+    __table_args__ = (
+        UniqueConstraint("token", name="uq_onbid_review_summary_shares_token"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    token: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    auction_item_id: Mapped[int] = mapped_column(ForeignKey("auction_items.id"), nullable=False, index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    public_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    summary_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
 class AuctionItemSnapshot(Base):
     __tablename__ = "auction_item_snapshots"
 

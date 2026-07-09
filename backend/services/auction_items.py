@@ -342,6 +342,30 @@ def build_onbid_info_badges(item: AuctionItem) -> dict[str, Any]:
     }
 
 
+def apply_data_quality_filter(statement, data_quality: str):
+    if data_quality != "needs_confirmation":
+        return statement
+    return statement.where(
+        or_(
+            AuctionItem.minimum_bid_price <= 0,
+            AuctionItem.appraisal_price <= 0,
+            AuctionItem.address == "",
+            AuctionItem.bid_end_at == "",
+            AuctionItem.item_description == "",
+            AuctionItem.attachment_summary == "",
+            ~AuctionItem.notice_links.any(),
+        )
+    )
+
+
+def supports_development_insight(item_or_category: Any) -> bool:
+    if isinstance(item_or_category, str):
+        category = normalize_public_category(item_or_category)
+    else:
+        category = normalize_public_category(getattr(item_or_category, "public_category", "") or derive_onbid_category(item_or_category))
+    return category == "real_estate"
+
+
 def normalize_match_text(value: str) -> str:
     text = str(value or "").lower()
     replacements = {
@@ -710,6 +734,7 @@ def list_auction_items(
     min_discount_rate: float | None = None,
     has_notice: str = "ALL",
     has_detail: str = "ALL",
+    data_quality: str = "ALL",
     category: str = "all",
     public_only: bool = False,
     notice_id: int | None = None,
@@ -757,6 +782,7 @@ def list_auction_items(
         statement = statement.where(or_(AuctionItem.item_description != "", AuctionItem.attachment_summary != ""))
     if has_detail == "no":
         statement = statement.where(AuctionItem.item_description == "", AuctionItem.attachment_summary == "")
+    statement = apply_data_quality_filter(statement, data_quality)
     statement = apply_onbid_category_filter(statement, category)
     if notice_id is not None:
         statement = statement.where(AuctionItem.notice_links.any(AuctionNoticeItemLink.notice_id == notice_id))
@@ -796,6 +822,7 @@ def count_auction_items(
     min_discount_rate: float | None = None,
     has_notice: str = "ALL",
     has_detail: str = "ALL",
+    data_quality: str = "ALL",
     category: str = "all",
     public_only: bool = False,
     notice_id: int | None = None,
@@ -837,6 +864,7 @@ def count_auction_items(
         statement = statement.where(or_(AuctionItem.item_description != "", AuctionItem.attachment_summary != ""))
     if has_detail == "no":
         statement = statement.where(AuctionItem.item_description == "", AuctionItem.attachment_summary == "")
+    statement = apply_data_quality_filter(statement, data_quality)
     statement = apply_onbid_category_filter(statement, category)
     if notice_id is not None:
         statement = statement.where(AuctionItem.notice_links.any(AuctionNoticeItemLink.notice_id == notice_id))
@@ -1245,6 +1273,7 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         "notice_count": len(notices),
         "notices": notices,
         "has_detail": bool(item.item_description or item.attachment_summary or item.cautions),
+        "supports_development_insight": supports_development_insight(item),
         "external_url": notices[0]["detail_url"] if notices and notices[0]["detail_url"] else "",
     }
 

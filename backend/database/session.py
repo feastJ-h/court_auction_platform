@@ -120,6 +120,69 @@ def ensure_schema_migrations(db_engine: Engine) -> None:
             if column_name not in auction_notice_columns:
                 connection.execute(text(ddl))
 
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS product_analytics_events (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    event_name VARCHAR(128) NOT NULL,
+                    auction_item_id INTEGER NULL REFERENCES auction_items(id),
+                    user_id INTEGER NULL REFERENCES users(id),
+                    session_id VARCHAR(128) NOT NULL DEFAULT '',
+                    category VARCHAR(64) NOT NULL DEFAULT '',
+                    metadata_json TEXT NOT NULL DEFAULT '{}',
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_product_analytics_events_event_name ON product_analytics_events(event_name)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_product_analytics_events_auction_item_id ON product_analytics_events(auction_item_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_product_analytics_events_user_id ON product_analytics_events(user_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_product_analytics_events_session_id ON product_analytics_events(session_id)"))
+
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS onbid_data_issue_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    auction_item_id INTEGER NOT NULL REFERENCES auction_items(id),
+                    user_id INTEGER NULL REFERENCES users(id),
+                    reporter_session_id VARCHAR(128) NOT NULL DEFAULT '',
+                    issue_types_json TEXT NOT NULL DEFAULT '[]',
+                    note TEXT NOT NULL DEFAULT '',
+                    contains_personal_info BOOLEAN NOT NULL DEFAULT 0,
+                    status VARCHAR(32) NOT NULL DEFAULT 'pending',
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_data_issue_reports_auction_item_id ON onbid_data_issue_reports(auction_item_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_data_issue_reports_user_id ON onbid_data_issue_reports(user_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_data_issue_reports_reporter_session_id ON onbid_data_issue_reports(reporter_session_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_data_issue_reports_status ON onbid_data_issue_reports(status)"))
+
+        connection.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS onbid_review_summary_shares (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    token VARCHAR(64) NOT NULL UNIQUE,
+                    auction_item_id INTEGER NOT NULL REFERENCES auction_items(id),
+                    created_by_user_id INTEGER NULL REFERENCES users(id),
+                    public_note TEXT NOT NULL DEFAULT '',
+                    summary_json TEXT NOT NULL DEFAULT '{}',
+                    revoked_at DATETIME NULL,
+                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_review_summary_shares_token ON onbid_review_summary_shares(token)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_review_summary_shares_auction_item_id ON onbid_review_summary_shares(auction_item_id)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_review_summary_shares_created_by_user_id ON onbid_review_summary_shares(created_by_user_id)"))
+
 
 def ensure_analysis_results_seed(db_engine: Engine) -> None:
     db_url = str(db_engine.url)

@@ -1,5 +1,58 @@
 # Migration Ledger
 
+## v007 - Product UX safety, review helpers, sharing, and analytics
+Change date: 2026-07-10
+
+### Purpose
+
+v007 adds non-destructive support for ONBID review workflow UX: today review completion, data issue reports, public-safe review summary sharing, and product analytics events. It also keeps public copy focused on source-document confirmation rather than automated judgment.
+
+### Schema Changes
+
+New tables created with `CREATE TABLE IF NOT EXISTS`:
+
+- `product_analytics_events`
+- `onbid_data_issue_reports`
+- `onbid_review_summary_shares`
+
+Indexes are created if missing for event name, item id, user id, session id, report status, and share token lookups.
+
+### Data Handling
+
+- Analytics metadata excludes raw memo text, raw payload, full source URLs, and raw document paths.
+- Issue reports are stored as pending operational review records and are not reflected directly on public pages.
+- Shared summaries contain public item facts only and are served with `noindex, noarchive`.
+- Private notes, account identifiers, raw AI/OCR body, and internal paths are not included in shared summaries.
+
+### Migration Method
+
+SQLite uses `backend/database/session.py::ensure_schema_migrations` after `Base.metadata.create_all(engine)`. Existing rows and columns are not deleted.
+
+Before applying the local DB migration during v007, Codex ran:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\backup_database.ps1
+```
+
+Backup:
+
+```text
+C:\Users\xogns\Documents\testAuction\court_auction_platform\storage\backups\auction_data_20260710_014324.db
+sha256: 20BED6D406F1571BBD91EA3B96DC0BFA1420C2099E6D458FCE263D909ED95EEB
+```
+
+### Rollback
+
+Code rollback disables the new routes and write paths. The new SQLite tables can remain in place; destructive table removal is not required and was not performed.
+
+### Verification
+
+- `py_compile` for changed backend modules and v007 tests
+- Existing ONBID freshness/filter/category/sitemap/module/page/auth tests
+- `tests/router_boundary_test.py`
+- `tests/isolated_operations_test.py`
+- v007 tests for copy safety, today completion, data quality filter, issue reports, sharing, analytics events, and Development Insight CTA
+
 ## v005 - Public freshness, stored ONBID derived fields, and review readiness
 Change date: 2026-07-07
 

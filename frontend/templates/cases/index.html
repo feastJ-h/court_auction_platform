@@ -14,7 +14,7 @@
     <header class="mb-5">
       <p class="text-sm font-black text-emerald-700">회생파산 공개 목록</p>
       <h1 class="mt-1 text-2xl font-black">회생파산 목록</h1>
-      <p class="mt-2 text-sm text-zinc-600">로그인 사용자에게는 AI 분석 결과, 관심/메모 기능이 추가로 제공됩니다.</p>
+      <p class="mt-2 text-sm text-zinc-600">로그인 사용자에게는 원문 확인 포인트, 관심/메모 기능이 추가로 제공됩니다.</p>
     </header>
 
     <form class="mb-4 grid gap-2 rounded-md border border-zinc-200 bg-white p-4 md:grid-cols-[1fr_180px_auto]" action="/cases" data-nav-scope="local-filter" data-active-section="{{ active_section|default('') }}" data-active-category="{{ active_category|default('') }}">
@@ -40,7 +40,7 @@
                   <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-xs font-black text-white">{{ item.case_number }}</span>
                   <span class="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-black text-emerald-800">{{ item.main_category }}</span>
                   <span class="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-black text-blue-800">{{ item.d_day.label }}</span>
-                  {% if item.has_login_analysis %}<span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">로그인 후 분석 확인</span>{% endif %}
+                  {% if item.has_login_analysis %}<span class="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-800">로그인 후 원문 확인 포인트</span>{% endif %}
                 </div>
                 <h2 class="mt-2 font-black"><a href="/cases/{{ item.id }}">{{ item.title }}</a></h2>
                 <p class="mt-2 text-sm text-zinc-600">{{ item.sub_category }} / {{ item.address }}</p>

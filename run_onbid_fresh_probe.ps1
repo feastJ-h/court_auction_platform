@@ -2,6 +2,7 @@ param(
     [ValidateSet("real_estate", "movable", "notice", "national_property")]
     [string]$ApiKind = "real_estate",
     [int]$Limit = 20,
+    [int]$PageNo = 1,
     [int]$MaxPages = 1,
     [string]$MinDate = "2025-01-01",
     [string]$PrptDivCd = "0007,0005,0004,0002,0003,0006,0008,0011,0013",
@@ -30,6 +31,7 @@ $args = @(
     "-File", ".\run_onbid_probe.ps1",
     "-ApiKind", $ApiKind,
     "-Limit", "$Limit",
+    "-PageNo", "$PageNo",
     "-MaxPages", "$MaxPages",
     "-MinDate", $MinDate,
     "-PrptDivCd", $PrptDivCd,

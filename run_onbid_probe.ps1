@@ -2,6 +2,7 @@ param(
     [ValidateSet("real_estate", "movable", "notice", "national_property")]
     [string]$ApiKind = "national_property",
     [int]$Limit = 20,
+    [int]$PageNo = 1,
     [int]$MaxPages = 1,
     [string]$MinDate = "2025-01-01",
     [string]$PrptDivCd = "0007,0005,0004,0002,0003,0006,0008,0011,0013",
@@ -35,6 +36,7 @@ if (-not $Sample) {
 $arguments = @(
     "-m", "backend.workers.onbid_sync",
     "--limit", "$Limit",
+    "--page-no", "$PageNo",
     "--max-pages", "$MaxPages",
     "--api-kind", $ApiKind,
     "--min-date", $MinDate,
@@ -72,6 +74,6 @@ if ($Sample) {
     $arguments += "--sample"
 }
 
-Write-Output "ONBID probe start ApiKind=$ApiKind Limit=$Limit MaxPages=$MaxPages MinDate=$MinDate PrptDivCd=$PrptDivCd PvctTrgtYn=$PvctTrgtYn BidPrdYmdStart=$BidPrdYmdStart BidPrdYmdEnd=$BidPrdYmdEnd IncludeDetails=$IncludeDetails DetailLimit=$DetailLimit Sample=$Sample"
+Write-Output "ONBID probe start ApiKind=$ApiKind PageNo=$PageNo Limit=$Limit MaxPages=$MaxPages MinDate=$MinDate PrptDivCd=$PrptDivCd PvctTrgtYn=$PvctTrgtYn BidPrdYmdStart=$BidPrdYmdStart BidPrdYmdEnd=$BidPrdYmdEnd IncludeDetails=$IncludeDetails DetailLimit=$DetailLimit Sample=$Sample"
 & $PythonExe @arguments
 exit $LASTEXITCODE

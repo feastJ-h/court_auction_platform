@@ -28,8 +28,10 @@ from backend.services.product_engagement import (
     create_data_issue_report,
     create_review_summary_share,
     get_review_summary_share,
+    list_review_summary_shares,
     parse_share_summary,
     record_product_event,
+    revoke_review_summary_share,
 )
 from backend.services.user_auction_preferences import (
     get_preference,
@@ -773,6 +775,53 @@ def register_auction_routes(
                 session_id=_analytics_session_id(request),
             )
         return RedirectResponse(url=f"/onbid/share/{token}", status_code=303)
+
+    @app.get("/my/onbid/shared-summaries")
+    def my_onbid_shared_summaries(request: Request):
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            if current_user is None:
+                return login_redirect("/my/onbid/shared-summaries")
+            shares = list_review_summary_shares(session, user_id=current_user.id, include_revoked=True, limit=100)
+            share_views = []
+            for share in shares:
+                item = get_auction_item(session, share.auction_item_id)
+                share_views.append(
+                    {
+                        "token": share.token,
+                        "created_at": share.created_at,
+                        "revoked_at": share.revoked_at,
+                        "is_active": share.revoked_at is None,
+                        "summary": parse_share_summary(share),
+                        "item": serialize_auction_item(item) if item else None,
+                    }
+                )
+            return templates.TemplateResponse(
+                request,
+                "auctions/shared_manage.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "my",
+                    "active_subsection": "shared_summaries",
+                    "active_category": "",
+                    "page_title": "공유 요약 관리",
+                    "breadcrumbs": [{"label": "내 목록", "href": "/my/onbid/favorites"}, {"label": "공유 요약", "href": "/my/onbid/shared-summaries"}],
+                    "review_mode": get_settings().review_mode,
+                    "shares": share_views,
+                },
+            )
+
+    @app.post("/my/onbid/shared-summaries/{token}/revoke")
+    def revoke_my_onbid_shared_summary(request: Request, token: str):
+        with session_scope() as session:
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables mutations.")
+            current_user = require_user(request, session)
+            if current_user is None:
+                return login_redirect("/my/onbid/shared-summaries")
+            revoke_review_summary_share(session, token=token, user_id=current_user.id)
+        return RedirectResponse(url="/my/onbid/shared-summaries", status_code=303)
 
     @app.post("/onbid/{auction_item_id}/development-insight")
     def click_development_insight(request: Request, auction_item_id: int):

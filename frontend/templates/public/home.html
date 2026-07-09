@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="온비드 공매와 회생·파산 공고를 공개 탐색하고 로그인 후 관심, 패스, 메모, 원문 확인 포인트를 관리합니다.">
+  <meta name="description" content="온비드 공매와 회생·파산 공고를 공개 탐색하고 로그인 후 관심, 패스, 감시, 메모를 관리합니다.">
   <meta property="og:title" content="Court Auction Platform">
-  <meta property="og:description" content="온비드 공매와 회생·파산 공고 공개 탐색">
+  <meta property="og:description" content="경·공매 후보를 빠르게 거르고 기록하는 검토 보조 플랫폼">
   <title>Court Auction Platform</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
@@ -14,38 +14,70 @@
   {% include "shared/public_nav.html" %}
   <main>
     <section class="border-b border-zinc-200 bg-white">
-      <div class="mx-auto grid max-w-7xl gap-6 px-4 py-10 md:grid-cols-[1fr_360px] md:items-center">
-        <div>
-          <p class="text-sm font-black text-emerald-700">Court Auction Platform</p>
-          <h1 class="mt-2 text-3xl font-black tracking-normal md:text-5xl">온비드 공매와 회생·파산 공고</h1>
-          <p class="mt-4 max-w-2xl text-base leading-7 text-zinc-600">공개 정보는 바로 탐색하고, 로그인 후 관심·패스·감시·메모와 회생·파산 원문 확인 포인트를 함께 관리합니다.</p>
-          <div class="mt-6 flex flex-wrap gap-2 text-sm font-bold">
-            <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid">온비드 보기</a>
-            <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/cases">회생·파산 보기</a>
-            {% if current_user %}
-              <a class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-emerald-800" href="/user">내 분석 화면</a>
-            {% else %}
-              <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/login?next=/user">로그인</a>
-            {% endif %}
-          </div>
-        </div>
-        <div class="rounded-md border border-zinc-200 bg-zinc-50 p-5">
-          <div class="grid gap-3">
-            <a class="rounded-md border border-zinc-200 bg-white p-4" href="/onbid?closing_within_days=7">
-              <p class="text-sm font-black text-zinc-500">마감 임박</p>
-              <p class="mt-1 text-xl font-black">이번 주 온비드 공매</p>
-            </a>
-            <a class="rounded-md border border-zinc-200 bg-white p-4" href="/cases">
-              <p class="text-sm font-black text-zinc-500">공개 공고</p>
-              <p class="mt-1 text-xl font-black">회생·파산 기본 정보</p>
-            </a>
-            <a class="rounded-md border border-zinc-200 bg-white p-4" href="/disclaimer">
-              <p class="text-sm font-black text-zinc-500">고지</p>
-              <p class="mt-1 text-xl font-black">원문 확인과 투자 책임</p>
-            </a>
-          </div>
+      <div class="mx-auto max-w-7xl px-4 py-8">
+        <p class="text-sm font-black text-emerald-700">Court Auction Platform</p>
+        <h1 class="mt-2 text-3xl font-black tracking-normal md:text-5xl">경·공매 후보 검토 보조</h1>
+        <p class="mt-4 max-w-3xl text-base leading-7 text-zinc-600">오늘 새로 보이는 공고를 빠르게 확인하고, 관심 없는 항목은 패스해서 다음 검토 목록을 정리하세요. 최종 판단은 원문과 관계 서류 확인을 기준으로 해야 합니다.</p>
+        <div class="mt-6 flex flex-wrap gap-2 text-sm font-bold">
+          <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid">온비드 보기</a>
+          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/onbid/today">오늘 보기</a>
+          <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/cases">회생·파산 보기</a>
         </div>
       </div>
+    </section>
+
+    <section class="mx-auto max-w-7xl px-4 py-6" data-home-curation-cards="true">
+      <div class="grid gap-3 md:grid-cols-4">
+        {% for card in home_cards %}
+          <a class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm hover:border-emerald-400" href="{{ card.href }}">
+            <p class="text-sm font-black text-zinc-500">{{ card.title }}</p>
+            <p class="mt-2 text-3xl font-black">{{ card.count }}</p>
+            <p class="mt-2 text-sm leading-6 text-zinc-600">{{ card.description }}</p>
+          </a>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="mx-auto grid max-w-7xl gap-5 px-4 pb-8 lg:grid-cols-[1fr_320px]">
+      <div>
+        <div class="mb-3 flex items-center justify-between">
+          <h2 class="text-lg font-black">최근 공개 온비드</h2>
+          <a class="text-sm font-bold text-emerald-700" href="/onbid">전체 보기</a>
+        </div>
+        <div class="space-y-3">
+          {% for item in preview_items %}
+            <article class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+              <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div class="flex flex-wrap gap-2 text-xs font-bold">
+                    <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-white">{{ item.category_label }}</span>
+                    <span class="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">{{ item.d_day.label }}</span>
+                    {% if item.info_badges.has_critical_missing %}<span class="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">자료 확인 필요</span>{% endif %}
+                  </div>
+                  <h3 class="mt-2 font-black"><a href="/onbid/{{ item.id }}">{{ item.item_name or '물건명 확인 필요' }}</a></h3>
+                  <p class="mt-1 text-sm text-zinc-600">{{ item.address or '소재지 확인 필요' }}</p>
+                </div>
+                <div class="text-sm text-zinc-600 md:text-right">
+                  <p class="font-black text-zinc-950">{{ "{:,}".format(item.minimum_bid_price) if item.minimum_bid_price else '가격 확인 필요' }}</p>
+                  <p class="mt-1">{{ item.bid_end_at or '일정 확인 필요' }}</p>
+                </div>
+              </div>
+            </article>
+          {% else %}
+            <div class="rounded-md border border-dashed border-zinc-300 bg-white p-8 text-center text-zinc-500">공개 가능한 온비드 항목이 아직 없습니다.</div>
+          {% endfor %}
+        </div>
+      </div>
+      <aside class="rounded-md border border-zinc-200 bg-white p-4">
+        <h2 class="text-lg font-black">분류 현황</h2>
+        <dl class="mt-4 space-y-3 text-sm">
+          <div class="flex justify-between"><dt>전체</dt><dd class="font-black">{{ category_counts.all }}</dd></div>
+          <div class="flex justify-between"><dt>부동산</dt><dd class="font-black">{{ category_counts.real_estate }}</dd></div>
+          <div class="flex justify-between"><dt>동산</dt><dd class="font-black">{{ category_counts.movable }}</dd></div>
+          <div class="flex justify-between"><dt>국유일반재산</dt><dd class="font-black">{{ category_counts.national_property }}</dd></div>
+        </dl>
+        <p class="mt-5 text-sm leading-6 text-zinc-600">자료가 부족한 항목은 원문 확인을 우선하세요. 이 서비스는 투자 판단이나 법률 검토를 제공하지 않습니다.</p>
+      </aside>
     </section>
     {% include "shared/ad_slot.html" %}
   </main>

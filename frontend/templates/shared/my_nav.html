@@ -3,7 +3,8 @@
     ('favorites', '관심', '/my/onbid/favorites'),
     ('watching', '감시', '/my/onbid/watching'),
     ('passed', '패스', '/my/onbid/passed'),
-    ('notes', '메모', '/my/onbid/notes')
+    ('notes', '메모', '/my/onbid/notes'),
+    ('shared_summaries', '공유 요약', '/my/onbid/shared-summaries')
   ] %}
     <a class="rounded-md px-3 py-2 {% if active_subsection == value %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white text-zinc-800{% endif %}" href="{{ href }}" {% if active_subsection == value %}aria-current="page"{% endif %}>{{ label }}</a>
   {% endfor %}

@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import re
 import secrets
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import (
@@ -183,8 +184,118 @@ def get_review_summary_share(session: Session, token: str) -> OnbidReviewSummary
     )
 
 
+def list_review_summary_shares(
+    session: Session,
+    *,
+    user_id: int | None = None,
+    include_revoked: bool = False,
+    limit: int = 100,
+) -> list[OnbidReviewSummaryShare]:
+    statement = select(OnbidReviewSummaryShare).order_by(OnbidReviewSummaryShare.created_at.desc())
+    if user_id is not None:
+        statement = statement.where(OnbidReviewSummaryShare.created_by_user_id == user_id)
+    if not include_revoked:
+        statement = statement.where(OnbidReviewSummaryShare.revoked_at.is_(None))
+    return list(session.scalars(statement.limit(limit)))
+
+
+def revoke_review_summary_share(session: Session, *, token: str, user_id: int | None = None) -> bool:
+    statement = select(OnbidReviewSummaryShare).where(OnbidReviewSummaryShare.token == token)
+    if user_id is not None:
+        statement = statement.where(OnbidReviewSummaryShare.created_by_user_id == user_id)
+    share = session.scalar(statement)
+    if share is None or share.revoked_at is not None:
+        return False
+    share.revoked_at = datetime.now()
+    session.flush()
+    return True
+
+
 def parse_share_summary(share: OnbidReviewSummaryShare) -> dict[str, Any]:
     try:
         return json.loads(share.summary_json or "{}")
     except json.JSONDecodeError:
         return {}
+
+
+def parse_issue_types(report: OnbidDataIssueReport) -> list[str]:
+    try:
+        parsed = json.loads(report.issue_types_json or "[]")
+    except json.JSONDecodeError:
+        parsed = []
+    return [str(value) for value in parsed if value]
+
+
+def list_data_issue_reports(
+    session: Session,
+    *,
+    status: str = "pending",
+    issue_type: str = "",
+    limit: int = 100,
+) -> list[OnbidDataIssueReport]:
+    statement = select(OnbidDataIssueReport).order_by(OnbidDataIssueReport.created_at.desc())
+    if status and status != "ALL":
+        statement = statement.where(OnbidDataIssueReport.status == status)
+    if issue_type:
+        statement = statement.where(OnbidDataIssueReport.issue_types_json.like(f"%{issue_type}%"))
+    return list(session.scalars(statement.limit(limit)))
+
+
+def update_data_issue_report_status(
+    session: Session,
+    *,
+    report_id: int,
+    status: str,
+) -> bool:
+    if status not in {"pending", "reviewed", "resolved", "ignored"}:
+        return False
+    report = session.get(OnbidDataIssueReport, report_id)
+    if report is None:
+        return False
+    report.status = status
+    session.flush()
+    return True
+
+
+def build_product_analytics_summary(session: Session, *, days: int = 7) -> dict[str, Any]:
+    days = max(1, min(int(days or 7), 90))
+    since = datetime.now() - timedelta(days=days)
+    allowed = {
+        "view_today_queue",
+        "favorite_item",
+        "pass_item",
+        "watch_item",
+        "write_memo",
+        "click_original_link",
+        "submit_data_issue",
+        "create_review_summary",
+        "open_shared_summary",
+        "copy_shared_summary_link",
+        "view_development_insight_cta",
+        "click_development_insight_cta",
+    }
+    rows = session.execute(
+        select(ProductAnalyticsEvent.event_name, ProductAnalyticsEvent.category, func.count(ProductAnalyticsEvent.id))
+        .where(ProductAnalyticsEvent.created_at >= since)
+        .group_by(ProductAnalyticsEvent.event_name, ProductAnalyticsEvent.category)
+        .order_by(ProductAnalyticsEvent.event_name.asc())
+    ).all()
+    by_event: dict[str, int] = {name: 0 for name in sorted(allowed)}
+    by_category: dict[str, dict[str, int]] = {}
+    for event_name, category, count in rows:
+        if event_name not in allowed:
+            continue
+        by_event[event_name] = by_event.get(event_name, 0) + int(count)
+        category_key = category or "uncategorized"
+        by_category.setdefault(category_key, {})[event_name] = int(count)
+    return {
+        "days": days,
+        "by_event": by_event,
+        "by_category": by_category,
+        "preference_total": sum(by_event.get(name, 0) for name in ("favorite_item", "pass_item", "watch_item", "write_memo")),
+        "original_link_clicks": by_event.get("click_original_link", 0),
+        "development_insight": {
+            "views": by_event.get("view_development_insight_cta", 0),
+            "clicks": by_event.get("click_development_insight_cta", 0),
+        },
+    }

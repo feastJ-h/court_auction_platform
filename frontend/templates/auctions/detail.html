@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ view.item_name }} | 온비드 공개 상세</title>
+  <title>{{ view.item_name }} | 온비드 상세</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-zinc-50 text-zinc-950">
@@ -12,24 +12,33 @@
   <main class="mx-auto max-w-6xl px-4 py-6" data-nav-scope="local-filter" data-active-section="{{ active_section|default('') }}" data-active-category="{{ active_category|default('') }}">
     {% include "shared/breadcrumbs.html" %}
     <header class="mb-5">
-      <div>
-        <div class="flex flex-wrap items-center gap-2 text-xs font-bold">
-          <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-white">{{ view.category_label }}</span>
-          <span class="rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-700">{{ view.status or '상태 미확인' }}</span>
-          <span class="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">{{ view.d_day.label }}</span>
-        </div>
-        <p class="mt-3 font-mono text-sm font-black text-emerald-700">{{ view.cltr_mng_no }}</p>
-        <h1 class="mt-1 text-2xl font-black">{{ view.item_name or '온비드 물건' }}</h1>
-        <p class="mt-2 text-sm text-zinc-600">{{ view.address or '주소 미확인' }}</p>
+      <div class="flex flex-wrap items-center gap-2 text-xs font-bold">
+        <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-white">{{ view.category_label }}</span>
+        <span class="rounded-full bg-zinc-100 px-2.5 py-1 text-zinc-700">{{ view.status or '상태 확인 필요' }}</span>
+        <span class="rounded-full bg-blue-100 px-2.5 py-1 text-blue-800">{{ view.d_day.label }}</span>
       </div>
+      <p class="mt-3 font-mono text-sm font-black text-emerald-700">{{ view.cltr_mng_no }}</p>
+      <h1 class="mt-1 text-2xl font-black">{{ view.item_name or '온비드 물건' }}</h1>
+      <p class="mt-2 text-sm text-zinc-600">{{ view.address or '소재지 확인 필요' }}</p>
     </header>
 
-    <section class="mb-5 grid gap-3 md:grid-cols-5">
-      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">최저입찰가</p><p class="mt-2 text-xl font-black">{{ "{:,}".format(view.minimum_bid_price) if view.minimum_bid_price else '미정' }}</p></div>
-      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">감정가</p><p class="mt-2 text-xl font-black">{{ "{:,}".format(view.appraisal_price) if view.appraisal_price else '미정' }}</p></div>
-      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">종료일</p><p class="mt-2 text-xl font-black">{{ view.bid_end_at or '일정 확인 필요' }}</p></div>
-      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">공지 개수</p><p class="mt-2 text-xl font-black">{{ view.notice_count }}</p></div>
-      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">항목 상태</p><p class="mt-2 text-xl font-black">{{ '정상' if not view.info_badges.has_critical_missing else '점검 필요' }}</p></div>
+    <section class="mb-5 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm font-bold leading-7 text-amber-900" data-detail-zone="source-status">
+      아래 정보는 수집된 공개 자료를 바탕으로 정리한 내용입니다. 최종 판단 전 원문과 관계 서류를 직접 확인해야 합니다.
+      <div class="mt-3 flex flex-wrap gap-2">
+        {% if view.external_url %}
+          <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid/{{ view.id }}/original-link" target="_blank" rel="noopener noreferrer">원문 보기</a>
+        {% else %}
+          <span class="rounded-md border border-amber-300 bg-white px-4 py-2 text-amber-900">원문 링크 확인 필요</span>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="mb-5 grid gap-3 md:grid-cols-5" data-detail-zone="objective-facts">
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">최저입찰가</p><p class="mt-2 text-xl font-black">{{ "{:,}".format(view.minimum_bid_price) if view.minimum_bid_price else '확인 필요' }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">감정가</p><p class="mt-2 text-xl font-black">{{ "{:,}".format(view.appraisal_price) if view.appraisal_price else '확인 필요' }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">입찰 마감</p><p class="mt-2 text-xl font-black">{{ view.bid_end_at or '확인 필요' }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">소재지</p><p class="mt-2 text-sm font-black">{{ view.address or '확인 필요' }}</p></div>
+      <div class="rounded-md border border-zinc-200 bg-white p-4"><p class="text-xs font-bold text-zinc-500">자료 상태</p><p class="mt-2 text-xl font-black">{{ '자료 확인 필요' if view.info_badges.has_critical_missing else '공개 자료 기준 정리' }}</p></div>
     </section>
 
     <section class="grid gap-5 lg:grid-cols-[1fr_360px]">
@@ -37,33 +46,36 @@
         <section class="rounded-md border border-zinc-200 bg-white p-5">
           <h2 class="text-lg font-black">기본 정보</h2>
           <dl class="mt-4 grid gap-3 text-sm md:grid-cols-2">
-            <div><dt class="font-bold text-zinc-500">카테고리</dt><dd class="mt-1 font-black">{{ view.category_label }}</dd></div>
-            <div><dt class="font-bold text-zinc-500">상태 / 방식</dt><dd class="mt-1 font-black">{{ view.disposal_method or '-' }} / {{ view.bid_method or '-' }}</dd></div>
+            <div><dt class="font-bold text-zinc-500">유형</dt><dd class="mt-1 font-black">{{ view.category_label }}</dd></div>
+            <div><dt class="font-bold text-zinc-500">처분 / 입찰 방식</dt><dd class="mt-1 font-black">{{ view.disposal_method or '-' }} / {{ view.bid_method or '-' }}</dd></div>
             <div><dt class="font-bold text-zinc-500">기관</dt><dd class="mt-1 font-black">{{ view.agency_name or '-' }}</dd></div>
-            <div><dt class="font-bold text-zinc-500">공고일</dt><dd class="mt-1 font-black">{{ view.open_bid_at or '-' }}</dd></div>
+            <div><dt class="font-bold text-zinc-500">개찰일</dt><dd class="mt-1 font-black">{{ view.open_bid_at or '-' }}</dd></div>
             <div><dt class="font-bold text-zinc-500">온비드 번호</dt><dd class="mt-1 font-mono">{{ view.onbid_cltr_no or '-' }}</dd></div>
             <div><dt class="font-bold text-zinc-500">공매 번호</dt><dd class="mt-1 font-mono">{{ view.pbct_no or view.pbct_cdtn_no or '-' }}</dd></div>
           </dl>
         </section>
 
         <section class="rounded-md border border-zinc-200 bg-white p-5">
-          <h2 class="text-lg font-black">가격·일정 정보</h2>
-          <div class="mt-4 grid gap-3 md:grid-cols-3">
-            <div class="rounded-md bg-zinc-50 p-4"><p class="text-sm text-zinc-500">할인율</p><p class="mt-1 text-2xl font-black">{{ view.minimum_price_rate }}%</p></div>
-            <div class="rounded-md bg-zinc-50 p-4"><p class="text-sm text-zinc-500">보증금</p><p class="mt-1 text-2xl font-black">{{ "{:,}".format(view.bid_deposit) if view.bid_deposit else '미정' }}</p></div>
-            <div class="rounded-md bg-zinc-50 p-4"><p class="text-sm text-zinc-500">입찰 기간</p><p class="mt-1 font-black">{{ view.bid_start_at or '-' }} ~ {{ view.bid_end_at or '-' }}</p></div>
-          </div>
-        </section>
-
-        <section class="rounded-md border border-zinc-200 bg-white p-5">
           <h2 class="text-lg font-black">물건 정보</h2>
-          <dl class="mt-4 grid gap-3 md:grid-cols-2">
-            <div><dt class="font-bold text-zinc-500">면적</dt><dd>{{ view.land_area or '-' }}</dd></div>
-            <div><dt class="font-bold text-zinc-500">건물면적</dt><dd>{{ view.building_area or '-' }}</dd></div>
+          <dl class="mt-4 grid gap-3 text-sm md:grid-cols-2">
+            <div><dt class="font-bold text-zinc-500">토지 면적</dt><dd>{{ view.land_area or '-' }}</dd></div>
+            <div><dt class="font-bold text-zinc-500">건물 면적</dt><dd>{{ view.building_area or '-' }}</dd></div>
             <div><dt class="font-bold text-zinc-500">지목</dt><dd>{{ view.land_category or '-' }}</dd></div>
             <div><dt class="font-bold text-zinc-500">용도</dt><dd>{{ view.usage or '-' }}</dd></div>
           </dl>
-          <p class="mt-4 whitespace-pre-wrap text-sm leading-7 text-zinc-700">{{ view.item_description or '상세 정보가 없습니다.' }}</p>
+          <p class="mt-4 whitespace-pre-wrap text-sm leading-7 text-zinc-700">{{ view.item_description or '상세 정보가 없습니다. 원문 확인이 필요합니다.' }}</p>
+        </section>
+
+        <section class="rounded-md border border-zinc-200 bg-white p-5" data-detail-zone="source-checkpoints">
+          <h2 class="text-lg font-black">원문 확인 포인트</h2>
+          <div class="mt-4 grid gap-2 text-sm md:grid-cols-2">
+            {% for badge in view.info_badges.available %}
+              <span class="rounded-md bg-emerald-50 px-3 py-2 font-bold text-emerald-800">{{ badge }}</span>
+            {% endfor %}
+            {% for badge in view.info_badges.missing %}
+              <span class="rounded-md bg-amber-50 px-3 py-2 font-bold text-amber-800">{{ badge }}</span>
+            {% endfor %}
+          </div>
         </section>
 
         {% if same_notice_items %}
@@ -75,12 +87,9 @@
                   <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p class="font-black">{{ other.item_name or '온비드 물건' }}</p>
-                      <p class="mt-1 text-sm text-zinc-600">{{ other.address or '주소 미확인' }} / {{ other.category_label }}</p>
+                      <p class="mt-1 text-sm text-zinc-600">{{ other.address or '소재지 확인 필요' }} / {{ other.category_label }}</p>
                     </div>
-                    <div class="flex items-center gap-3">
-                      <span class="text-sm font-black">{{ "{:,}".format(other.minimum_bid_price) if other.minimum_bid_price else '미정' }}</span>
-                      <a class="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-black text-zinc-800" href="{{ base_path }}/{{ other.id }}">상세</a>
-                    </div>
+                    <a class="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-black text-zinc-800" href="{{ base_path }}/{{ other.id }}">상세 보기</a>
                   </div>
                 </article>
               {% endfor %}
@@ -89,9 +98,9 @@
         {% endif %}
       </div>
 
-      <aside class="space-y-4">
+      <aside class="space-y-4" data-detail-zone="personal-actions">
         <section class="rounded-md border border-zinc-200 bg-white p-5">
-          <h2 class="text-lg font-black">관심 동작</h2>
+          <h2 class="text-lg font-black">개인 검토</h2>
           {% if current_user %}
             <div class="mt-3 grid grid-cols-3 gap-2">
               {% for action, label, active in [('favorite', '관심', preference.is_favorite), ('watching', '감시', preference.is_watching), ('passed', '패스', preference.is_passed)] %}
@@ -112,24 +121,19 @@
             </form>
           {% else %}
             <div class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-4">
-              <p class="text-sm font-bold text-emerald-900">로그인 후 관심/감시/패스/메모를 이용할 수 있습니다.</p>
+              <p class="text-sm font-bold text-emerald-900">로그인하면 관심, 감시, 패스, 메모를 사용할 수 있습니다.</p>
               <a class="mt-3 inline-flex rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" href="/login?next=/onbid/{{ view.id }}">로그인 후 기능 사용</a>
             </div>
           {% endif %}
         </section>
 
         <section class="rounded-md border border-zinc-200 bg-white p-5">
-          <h2 class="text-lg font-black">공개 상태</h2>
-          <p class="mt-3 text-sm text-zinc-700">공개 화면에서는 수집된 기본 정보와 원문 확인 링크만 제공합니다.</p>
-        </section>
-
-        <section class="rounded-md border border-zinc-200 bg-white p-5">
-          <h2 class="text-lg font-black">검색 보조</h2>
+          <h2 class="text-lg font-black">검토 보조</h2>
           {% if issue_submitted %}
-            <p class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900">제보가 접수되었습니다. 자료 상태 확인을 위해 운영 검토가 필요할 수 있습니다.</p>
+            <p class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold text-emerald-900">제보가 접수되었습니다.</p>
           {% endif %}
           {% if share_created %}
-            <p class="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-900">공유 요약이 생성되었습니다.</p>
+            <p class="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm font-bold text-blue-900">공유 요약을 생성했습니다.</p>
             <a class="mt-2 inline-flex rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" href="/onbid/share/{{ share_created }}">공유 요약 열기</a>
           {% endif %}
           <p class="mt-3 text-sm text-zinc-700">수집된 공개 자료를 기준으로 정리한 정보입니다. 최종 판단 전 원문과 관련 서류를 직접 확인하세요.</p>
@@ -139,15 +143,15 @@
             {% endif %}
             {% if current_user %}
               <form action="/onbid/{{ view.id }}/review-summary" method="post">
-                <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">검색 공유 요약</button>
+                <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">검토 공유 요약</button>
               </form>
             {% else %}
               <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="/login?next=/onbid/{{ view.id }}">공유 요약은 로그인 후 생성</a>
             {% endif %}
           </div>
           {% if view.supports_development_insight %}
-            <div class="mt-4 rounded-md border border-teal-200 bg-teal-50 p-4">
-              <p class="text-sm font-bold text-teal-950">가정 기반 개발비 및 대략적 공간 검토를 돕는 참고 기능입니다. 실제 건축 인허가, 사업성, 수익성, 법률 판단을 보장하지 않습니다.</p>
+            <div class="mt-4 rounded-md border border-teal-200 bg-teal-50 p-4" data-development-insight-cta="true">
+              <p class="text-sm font-bold text-teal-950">가정 기반 개발비 및 대략적 공간 검토를 돕는 안내입니다. 실제 건축 인허가, 법률 판단, 수익성을 보장하지 않습니다.</p>
               <form class="mt-3" action="/onbid/{{ view.id }}/development-insight" method="post">
                 <button class="rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white" type="submit">개발 가능성 기초 검토</button>
               </form>
@@ -157,7 +161,7 @@
 
         <section class="rounded-md border border-zinc-200 bg-white p-5">
           <h2 class="text-lg font-black">오류 제보 / 자료 보완 요청</h2>
-          <p class="mt-2 text-sm text-zinc-600">제보 내용은 확인 전까지 공개 정보로 반영되지 않습니다.</p>
+          <p class="mt-2 text-sm text-zinc-600">제보 내용은 운영자 확인 전까지 공개 정보로 반영되지 않습니다.</p>
           <form class="mt-3 space-y-3" action="/onbid/{{ view.id }}/issue-report" method="post">
             <input type="hidden" name="next_url" value="/onbid/{{ view.id }}">
             <div class="grid gap-2 text-sm md:grid-cols-2">
@@ -178,7 +182,7 @@
                 </label>
               {% endfor %}
             </div>
-            <textarea class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" name="note" rows="3" maxlength="200" placeholder="개인정보, 자유형 정보, 법률 판단, 사적 의견은 입력하지 마세요."></textarea>
+            <textarea class="w-full rounded-md border border-zinc-300 px-3 py-2 text-sm" name="note" rows="3" maxlength="200" placeholder="개인정보, 자유로운 법률 판단, 사적 의견은 입력하지 마세요."></textarea>
             <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">제보 접수</button>
           </form>
         </section>
@@ -189,7 +193,7 @@
             <div class="mt-3 space-y-3">
               {% for notice in view.notices %}
                 <article class="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm">
-                  <p class="font-black">{{ notice.notice_title or '공지 제목 미확인' }}</p>
+                  <p class="font-black">{{ notice.notice_title or '공고 제목 확인 필요' }}</p>
                   <p class="mt-1 text-zinc-600">{{ notice.bid_start_at or '-' }} ~ {{ notice.bid_end_at or '-' }}</p>
                   <div class="mt-2 flex flex-wrap gap-2">
                     <a class="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-black text-zinc-800" href="/onbid?notice_id={{ notice.id }}">공고 연결 보기</a>

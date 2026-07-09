@@ -37,7 +37,13 @@ from backend.services.auth import (
     change_user_password,
     get_user_by_id,
 )
-from backend.services.auction_items import apply_public_onbid_freshness_filter
+from backend.services.auction_items import (
+    apply_public_onbid_freshness_filter,
+    count_auction_items,
+    get_onbid_category_counts,
+    list_auction_items,
+    serialize_auction_item,
+)
 from backend.services.user_event_notes import get_user_event_note_map
 from backend.web.routers.admin_operations import register_admin_operation_routes
 from backend.web.routers.admin_users import register_admin_user_routes
@@ -389,6 +395,37 @@ def on_startup() -> None:
 def root(request: Request):
     with session_scope() as session:
         current_user = require_user(request, session)
+        category_counts = get_onbid_category_counts(session, public_only=True)
+        home_cards = [
+            {
+                "title": "오늘 새로 확인된 물건",
+                "count": count_auction_items(session, public_only=True),
+                "description": "최근 수집 기준으로 공개 가능한 온비드 항목입니다.",
+                "href": "/onbid/today",
+            },
+            {
+                "title": "이번 주 마감 임박",
+                "count": count_auction_items(session, public_only=True, closing_within_days=7),
+                "description": "마감일이 가까운 항목을 먼저 확인합니다.",
+                "href": "/onbid?closing_within_days=7",
+            },
+            {
+                "title": "내 지역 신규 물건",
+                "count": count_auction_items(session, public_only=True, region="서울"),
+                "description": "비로그인 기본값은 서울/수도권 중심으로 안내합니다.",
+                "href": "/onbid?region=%EC%84%9C%EC%9A%B8",
+            },
+            {
+                "title": "가격 정보 있는 1억 이하",
+                "count": count_auction_items(session, public_only=True, price_max=100000000),
+                "description": "가격이 낮은 순으로 원문 확인 대상을 좁힙니다.",
+                "href": "/onbid?price_max=100000000",
+            },
+        ]
+        preview_items = [
+            serialize_auction_item(item)
+            for item in list_auction_items(session, public_only=True, sort="newest", limit=4)
+        ]
         return templates.TemplateResponse(
             request,
             "public/home.html",
@@ -400,6 +437,9 @@ def root(request: Request):
                 "active_category": "",
                 "breadcrumbs": [],
                 "review_mode": get_settings().review_mode,
+                "home_cards": home_cards,
+                "category_counts": category_counts,
+                "preview_items": preview_items,
             },
         )
 

@@ -25,6 +25,12 @@ from backend.services.crawl_runs import build_crawl_run_summary
 from backend.services.local_analysis_status import build_local_analysis_status
 from backend.services.metadata_corrections import ALLOWED_PARSE_STATUSES
 from backend.services.onbid_observability import build_onbid_observability_summary
+from backend.services.product_engagement import (
+    build_product_analytics_summary,
+    list_data_issue_reports,
+    parse_issue_types,
+    update_data_issue_report_status,
+)
 from backend.web.dependencies import (
     AdminFilter,
     AttachAnalysisResults,
@@ -301,6 +307,85 @@ def register_admin_operation_routes(
                     "collection_quality": build_collection_quality_summary(session),
                     "crawl_summary": build_crawl_run_summary(session),
                     "onbid_metrics": build_onbid_observability_summary(session),
+                },
+            )
+
+    @app.get("/admin/onbid-issue-reports")
+    def admin_onbid_issue_reports_page(
+        request: Request,
+        status: str = Query("pending"),
+        issue_type: str = Query(""),
+    ):
+        with session_scope() as session:
+            current_user = require_admin(request, session)
+            if current_user is None:
+                return login_redirect("/admin/onbid-issue-reports")
+            reports = list_data_issue_reports(session, status=status, issue_type=issue_type, limit=200)
+            report_views = []
+            for report in reports:
+                report_views.append(
+                    {
+                        "id": report.id,
+                        "auction_item_id": report.auction_item_id,
+                        "created_at": report.created_at,
+                        "status": report.status,
+                        "issue_types": parse_issue_types(report),
+                        "note": report.note,
+                        "contains_personal_info": report.contains_personal_info,
+                    }
+                )
+            return templates.TemplateResponse(
+                request,
+                "admin/onbid_issue_reports.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "onbid_issue_reports",
+                    "active_category": "",
+                    "page_title": "ONBID 오류 제보",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}, {"label": "ONBID 오류 제보", "href": "/admin/onbid-issue-reports"}],
+                    "review_mode": get_settings().review_mode,
+                    "reports": report_views,
+                    "filters": {"status": status, "issue_type": issue_type},
+                    "status_options": ["pending", "reviewed", "resolved", "ignored"],
+                },
+            )
+
+    @app.post("/admin/onbid-issue-reports/{report_id}/status")
+    def update_admin_onbid_issue_report_status(
+        request: Request,
+        report_id: int,
+        status: str = Form(...),
+    ):
+        with session_scope() as session:
+            current_user = require_admin(request, session)
+            if current_user is None:
+                return login_redirect("/admin/onbid-issue-reports")
+            if get_settings().review_mode:
+                raise HTTPException(status_code=403, detail="Review mode disables admin mutations.")
+            update_data_issue_report_status(session, report_id=report_id, status=status)
+        return RedirectResponse(url="/admin/onbid-issue-reports", status_code=303)
+
+    @app.get("/admin/product-analytics")
+    def admin_product_analytics_page(request: Request, days: int = Query(7, ge=1, le=90)):
+        with session_scope() as session:
+            current_user = require_admin(request, session)
+            if current_user is None:
+                return login_redirect("/admin/product-analytics")
+            return templates.TemplateResponse(
+                request,
+                "admin/product_analytics.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "product_analytics",
+                    "active_category": "",
+                    "page_title": "제품 사용 요약",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}, {"label": "제품 사용 요약", "href": "/admin/product-analytics"}],
+                    "review_mode": get_settings().review_mode,
+                    "summary": build_product_analytics_summary(session, days=days),
                 },
             )
 

@@ -14,17 +14,17 @@
     <section class="rounded-md border border-zinc-200 bg-white p-5 shadow-sm">
       <p class="text-sm font-black text-teal-700">Development Insight</p>
       <h1 class="mt-1 text-2xl font-black">개발 가능성 기초 검토</h1>
-      <p class="mt-3 text-sm leading-7 text-zinc-700">가정 기반 개발비 및 대략적 공간 검토를 돕는 참고 기능입니다. 실제 건축 인허가, 사업성, 수익성, 법률 판단을 보장하지 않습니다.</p>
+      <p class="mt-3 text-sm leading-7 text-zinc-700">가정 기반 개발비 및 대략적 공간 검토를 돕는 안내입니다. 실제 건축 인허가, 법률 판단, 수익성을 보장하지 않습니다.</p>
       <dl class="mt-5 grid gap-3 text-sm md:grid-cols-2">
         <div><dt class="font-bold text-zinc-500">물건</dt><dd class="mt-1 font-black">{{ view.item_name }}</dd></div>
         <div><dt class="font-bold text-zinc-500">소재지</dt><dd class="mt-1 font-black">{{ view.address or '위치 확인 필요' }}</dd></div>
-        <div><dt class="font-bold text-zinc-500">토지면적</dt><dd class="mt-1 font-black">{{ view.land_area or '자료 확인 필요' }}</dd></div>
-        <div><dt class="font-bold text-zinc-500">건물면적</dt><dd class="mt-1 font-black">{{ view.building_area or '자료 확인 필요' }}</dd></div>
+        <div><dt class="font-bold text-zinc-500">토지 면적</dt><dd class="mt-1 font-black">{{ view.land_area or '자료 확인 필요' }}</dd></div>
+        <div><dt class="font-bold text-zinc-500">건물 면적</dt><dd class="mt-1 font-black">{{ view.building_area or '자료 확인 필요' }}</dd></div>
       </dl>
       <div class="mt-5 rounded-md border border-zinc-200 bg-zinc-50 p-4 text-sm leading-7 text-zinc-700">
         <p class="font-black text-zinc-950">현재 버전에서 확인하는 항목</p>
         <ul class="mt-2 list-disc space-y-1 pl-5">
-          <li>용도지역·지목 등 원문 확인이 필요한 기초 항목</li>
+          <li>용도지역, 지목 등 원문 확인이 필요한 기초 항목</li>
           <li>면적 정보의 존재 여부</li>
           <li>공개 자료 기준의 대략적 검토 준비 상태</li>
         </ul>

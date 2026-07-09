@@ -7,7 +7,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from backend.config import get_settings
@@ -153,7 +153,7 @@ def derive_onbid_category(item_or_payload: Any) -> str:
             raw_payload.get("apiKind"),
         )
     ).lower()
-    if "national_property" in text or "bid_target" in text or "national property" in text or "援?쑀" in text:
+    if "national_property" in text or "bid_target" in text or "national property" in text or "국유" in text:
         return "national_property"
     if any(token in text for token in REAL_ESTATE_TOKENS):
         return "real_estate"
@@ -326,12 +326,12 @@ def build_onbid_info_badges(item: AuctionItem) -> dict[str, Any]:
     available: list[str] = []
     missing: list[str] = []
     checks = [
-        (has_price, "媛寃??뺣낫 ?덉쓬", "媛寃??뺣낫 ?뺤씤 ?꾩슂"),
-        (has_location, "?뚯옱吏 ?덉쓬", "?뚯옱吏 ?뺣낫 ?뺤씤 ?꾩슂"),
-        (has_schedule, "?낆같 ?쇱젙 ?덉쓬", "?낆같 ?쇱젙 ?뺤씤 ?꾩슂"),
-        (has_notice, "怨듦퀬 ?곌껐", "怨듦퀬 ?곌껐 ?뺤씤 ?꾩슂"),
-        (has_detail, "?곸꽭 ?뺣낫 ?덉쓬", "?곸꽭 ?뺣낫 ?섏쭛 ?꾩슂"),
-        (has_source_url, "?먮Ц 留곹겕 ?덉쓬", "?먮Ц 留곹겕 ?뺤씤 ?꾩슂"),
+        (has_price, "가격 정보 있음", "가격 정보 확인 필요"),
+        (has_location, "소재지 있음", "소재지 확인 필요"),
+        (has_schedule, "입찰 일정 있음", "입찰 일정 확인 필요"),
+        (has_notice, "공고 연결", "공고 연결 확인 필요"),
+        (has_detail, "상세 정보 있음", "상세 정보 수집 필요"),
+        (has_source_url, "원문 링크 있음", "원문 링크 확인 필요"),
     ]
     for ok, available_label, missing_label in checks:
         (available if ok else missing).append(available_label if ok else missing_label)
@@ -426,41 +426,41 @@ def calculate_liquidation_score(item: AuctionItem) -> tuple[int, list[str]]:
     reasons: list[str] = []
     discount = calculate_discount_rate(item.appraisal_price, item.minimum_bid_price)
     if discount >= 30:
-        score += 15
-        reasons.append("?媛먮쪧???믪븘 媛寃?留ㅻ젰?꾧? ?덉뒿?덈떎.")
+        score += 10
+        reasons.append("감정가와 최저입찰가 차이가 큽니다. 가격 산정 근거는 원문에서 확인하세요.")
     elif discount >= 10:
-        score += 8
-        reasons.append("?쇱젙 ?섏???媛寃?留ㅻ젰???덉뒿?덈떎.")
+        score += 5
+        reasons.append("감정가와 최저입찰가 차이가 있습니다. 가격 정보는 원문 확인이 필요합니다.")
     else:
-        reasons.append("媛寃?留ㅻ젰?꾨뒗 異붽? 寃?좉? ?꾩슂?⑸땲??")
+        reasons.append("가격 정보는 원문에서 직접 확인하세요.")
 
     d_day = calculate_d_day(item.bid_end_at)["days"]
     if d_day is None:
         score -= 5
-        reasons.append("?낆같留덇컧?쇱씠 遺덈챸?뺥빀?덈떎.")
+        reasons.append("입찰 마감일 확인이 필요합니다.")
     elif 0 <= d_day <= 7:
         score -= 5
-        reasons.append("?낆같留덇컧???꾨컯?덉뒿?덈떎.")
+        reasons.append("입찰 마감이 임박했습니다.")
     elif d_day > 7:
-        score += 8
-        reasons.append("寃???쒓컙???⑥븘 ?덉뒿?덈떎.")
+        score += 5
+        reasons.append("검토 가능한 시간이 남아 있습니다.")
 
     if item.attachment_summary or item.item_description:
-        score += 10
-        reasons.append("怨듦퀬/?곸꽭 ?먮즺媛 ?덉뼱 寃??媛?ν빀?덈떎.")
+        score += 5
+        reasons.append("공고 또는 상세 자료가 있습니다.")
     else:
         score -= 5
-        reasons.append("?곸꽭 ?먮즺 蹂닿컯???꾩슂?⑸땲??")
+        reasons.append("상세 자료 보강이 필요합니다.")
 
-    if "?좎같" in item.status:
-        score -= 10
-        reasons.append("?좎같 ?대젰???덉뼱 蹂댁닔???묎렐???꾩슂?⑸땲??")
-    if "?숈같" in item.status:
+    if "유찰" in item.status:
+        score -= 5
+        reasons.append("유찰 이력이 있는지 원문에서 확인하세요.")
+    if "종료" in item.status:
         score -= 20
-        reasons.append("?대? ?숈같 ?곹깭?????덉뒿?덈떎.")
-    if "遺?숈궛" in item.asset_type:
-        score += 8
-        reasons.append("遺?숈궛? ?뚯깮/?뚯궛 ?먯궛 ?곌껐 ?곗꽑?쒖쐞媛 ?믪뒿?덈떎.")
+        reasons.append("종료 상태로 보입니다.")
+    if "부동산" in item.asset_type:
+        score += 3
+        reasons.append("부동산 항목입니다.")
 
     return max(0, min(100, score)), reasons
 
@@ -798,7 +798,8 @@ def list_auction_items(
         "price_desc": (AuctionItem.minimum_bid_price.desc(), AuctionItem.id.desc()),
         "updated_desc": (AuctionItem.updated_at.desc(), AuctionItem.id.desc()),
     }
-    ordering = orderings.get(sort, (AuctionItem.bid_end_at.asc(), AuctionItem.id.desc()))
+    active_first = case((AuctionItem.bid_end_at >= date.today().isoformat(), 0), else_=1)
+    ordering = orderings.get(sort, (active_first.asc(), AuctionItem.bid_end_at.asc(), AuctionItem.id.desc()))
     return list(
         session.scalars(
             statement.order_by(*ordering).limit(limit).offset(offset)
@@ -886,28 +887,28 @@ def apply_onbid_category_filter(statement, category: str):
                 AuctionItem.public_category == "national_property",
                 AuctionItem.raw_payload.like("%national_property%"),
                 AuctionItem.raw_payload.like("%bid_target%"),
-                AuctionItem.raw_payload.like("%援?쑀%"),
+                AuctionItem.raw_payload.like("%국유%"),
             )
         )
     real_estate_condition = or_(
         AuctionItem.asset_type.like("%Real estate%"),
-        AuctionItem.asset_type.like("%遺?숈궛%"),
-        AuctionItem.asset_type.like("%?좎?%"),
-        AuctionItem.asset_type.like("%嫄대Ъ%"),
-        AuctionItem.usage.like("%遺?숈궛%"),
-        AuctionItem.usage.like("%?좎?%"),
-        AuctionItem.usage.like("%嫄대Ъ%"),
+        AuctionItem.asset_type.like("%부동산%"),
+        AuctionItem.asset_type.like("%토지%"),
+        AuctionItem.asset_type.like("%건물%"),
+        AuctionItem.usage.like("%부동산%"),
+        AuctionItem.usage.like("%토지%"),
+        AuctionItem.usage.like("%건물%"),
         AuctionItem.raw_payload.like("%real_estate%"),
         AuctionItem.public_category == "real_estate",
     )
     movable_condition = or_(
         AuctionItem.asset_type.like("%Movable%"),
-        AuctionItem.asset_type.like("%?숈궛%"),
-        AuctionItem.asset_type.like("%李⑤웾%"),
-        AuctionItem.asset_type.like("%湲곌퀎%"),
-        AuctionItem.usage.like("%李⑤웾%"),
-        AuctionItem.usage.like("%湲곌퀎%"),
-        AuctionItem.usage.like("%?λ퉬%"),
+        AuctionItem.asset_type.like("%동산%"),
+        AuctionItem.asset_type.like("%차량%"),
+        AuctionItem.asset_type.like("%기계%"),
+        AuctionItem.usage.like("%차량%"),
+        AuctionItem.usage.like("%기계%"),
+        AuctionItem.usage.like("%장비%"),
         AuctionItem.raw_payload.like("%movable%"),
         AuctionItem.public_category == "movable",
     )

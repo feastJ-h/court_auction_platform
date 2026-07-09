@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ONBID 오류 제보 | Admin</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-zinc-50 text-zinc-950">
+  {% include "shared/review_banner.html" %}
+  {% include "shared/public_nav.html" %}
+  <main class="mx-auto max-w-7xl px-4 py-6">
+    {% include "shared/breadcrumbs.html" %}
+    {% include "shared/admin_nav.html" %}
+    <header class="mb-5">
+      <h1 class="text-2xl font-black">ONBID 오류 제보</h1>
+      <p class="mt-2 text-sm text-zinc-600">공개 제보 내용은 자동 노출하지 않고 운영자 검토 상태만 관리합니다.</p>
+    </header>
+    <form class="mb-4 flex flex-wrap gap-2 rounded-md border border-zinc-200 bg-white p-4 text-sm" action="/admin/onbid-issue-reports">
+      <select class="rounded-md border border-zinc-300 px-3 py-2" name="status">
+        {% for value in ['ALL', 'pending', 'reviewed', 'resolved', 'ignored'] %}
+          <option value="{{ value }}" {% if filters.status == value %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+      </select>
+      <input class="rounded-md border border-zinc-300 px-3 py-2" name="issue_type" value="{{ filters.issue_type }}" placeholder="유형">
+      <button class="rounded-md bg-zinc-950 px-4 py-2 font-black text-white" type="submit">조회</button>
+    </form>
+    <section class="overflow-hidden rounded-md border border-zinc-200 bg-white">
+      <div class="divide-y divide-zinc-100">
+        {% for report in reports %}
+          <article class="p-4">
+            <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div class="flex flex-wrap gap-2 text-xs font-bold">
+                  <span class="rounded-full bg-zinc-950 px-2.5 py-1 text-white">{{ report.status }}</span>
+                  {% if report.contains_personal_info %}<span class="rounded-full bg-red-100 px-2.5 py-1 text-red-800">개인정보 의심</span>{% endif %}
+                  {% for issue in report.issue_types %}
+                    <span class="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">{{ issue }}</span>
+                  {% endfor %}
+                </div>
+                <p class="mt-2 text-sm text-zinc-600">물건 #{{ report.auction_item_id }} · 제보 #{{ report.id }}</p>
+                {% if report.note %}<p class="mt-2 rounded-md bg-zinc-50 p-3 text-sm text-zinc-700">{{ report.note }}</p>{% endif %}
+                <a class="mt-2 inline-flex text-sm font-bold text-emerald-700" href="/onbid/{{ report.auction_item_id }}">물건 상세</a>
+              </div>
+              <form class="flex gap-2" action="/admin/onbid-issue-reports/{{ report.id }}/status" method="post">
+                <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="status">
+                  {% for value in status_options %}
+                    <option value="{{ value }}" {% if report.status == value %}selected{% endif %}>{{ value }}</option>
+                  {% endfor %}
+                </select>
+                <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">변경</button>
+              </form>
+            </div>
+          </article>
+        {% else %}
+          <div class="p-10 text-center text-zinc-500">표시할 제보가 없습니다.</div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+</body>
+</html>

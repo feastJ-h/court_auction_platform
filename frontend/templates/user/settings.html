@@ -21,7 +21,7 @@
         {% if current_user.role == 'admin' %}
           <a class="rounded-md border border-indigo-300 bg-indigo-50 px-4 py-2 text-indigo-800" href="/admin">Admin</a>
         {% endif %}
-        <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/logout">로그아웃</a>
+<form action="/logout" method="post">{% include "shared/csrf.html" %}<button class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" type="submit">로그아웃</button></form>
       </div>
     </header>
 

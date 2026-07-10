@@ -4,12 +4,14 @@ import hashlib
 import hmac
 from html import escape
 import json
+import logging
 from math import ceil
 from collections import defaultdict, deque
 from threading import Lock
 import time
 import secrets
-from urllib.parse import urlencode, urlsplit
+import uuid
+from urllib.parse import parse_qs, urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
@@ -19,7 +21,7 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 
 from backend.analysis.business_rules import evaluate_marketability
-from backend.config import PROJECT_ROOT, get_settings
+from backend.config import PROJECT_ROOT, get_settings, validate_runtime_config
 from backend.database.crud import (
     list_admin_events,
 )
@@ -39,10 +41,14 @@ from backend.services.audit_logs import create_audit_log
 from backend.services.onbid_review import select_home_preview
 from backend.services.metadata_corrections import update_event_metadata
 from backend.services.auth import (
+    accept_current_policies,
     authenticate_user,
     change_user_password,
     get_user_by_id,
 )
+from backend.services.csrf import CSRF_COOKIE_NAME, csrf_token_for_request, verify_double_submit
+from backend.services.security_state import get_security_state_store
+from backend.services.onbid_sync_runs import latest_successful_sync
 from backend.services.auction_items import (
     apply_public_onbid_freshness_filter,
     count_auction_items,
@@ -66,7 +72,10 @@ from backend.jobs.readiness import get_analysis_readiness
 
 
 app = FastAPI(title="Court Auction Platform")
-templates = Jinja2Templates(directory=str(PROJECT_ROOT / "frontend" / "templates"))
+templates = Jinja2Templates(
+    directory=str(PROJECT_ROOT / "frontend" / "templates"),
+    context_processors=[lambda request: {"csrf_token": csrf_token_for_request(request)}],
+)
 app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "frontend" / "static")), name="static")
 
 SESSION_COOKIE_NAME = "court_session"
@@ -75,6 +84,8 @@ _RATE_LIMIT_BUCKETS: dict[tuple[str, str], deque[float]] = defaultdict(deque)
 _RATE_LIMIT_LOCK = Lock()
 _REVOKED_SESSION_IDS: set[str] = set()
 _REVOKED_SESSION_LOCK = Lock()
+STARTED_AT = time.monotonic()
+LOGGER = logging.getLogger("court_auction.http")
 
 
 def _safe_error_response(request: Request, status_code: int, detail: str) -> Response:
@@ -129,16 +140,10 @@ def _rate_limited(request: Request) -> bool:
         return False
     name, limit, window = rule
     client = request.client.host if request.client else "unknown"
-    now = time.monotonic()
-    key = (name, client)
-    with _RATE_LIMIT_LOCK:
-        bucket = _RATE_LIMIT_BUCKETS[key]
-        while bucket and now - bucket[0] >= window:
-            bucket.popleft()
-        if len(bucket) >= limit:
-            return True
-        bucket.append(now)
-    return False
+    try:
+        return not get_security_state_store().consume_rate_limit(name, client, limit, window)
+    except Exception:
+        return get_settings().app_env != "development"
 
 
 def _cross_site_unsafe_request(request: Request) -> bool:
@@ -156,6 +161,30 @@ def _cross_site_unsafe_request(request: Request) -> bool:
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    request_id = request.headers.get("x-request-id", "")
+    if not request_id or len(request_id) > 128 or not all(ch.isalnum() or ch in "-_." for ch in request_id):
+        request_id = uuid.uuid4().hex
+    request.state.request_id = request_id
+    started = time.monotonic()
+    settings = get_settings()
+    enforce_csrf = settings.app_env in {"beta", "production"} or request.headers.get("x-enforce-csrf") == "1"
+    if enforce_csrf and request.method.upper() not in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+        submitted = request.headers.get("x-csrf-token", "")
+        if not submitted:
+            content_type = request.headers.get("content-type", "")
+            body = await request.body()
+            if "application/x-www-form-urlencoded" in content_type:
+                submitted = parse_qs(body.decode("utf-8", errors="replace")).get("csrf_token", [""])[0]
+            elif "multipart/form-data" in content_type:
+                marker = b'name="csrf_token"'
+                position = body.find(marker)
+                if position >= 0:
+                    value_start = body.find(b"\r\n\r\n", position)
+                    value_end = body.find(b"\r\n", value_start + 4)
+                    if value_start >= 0 and value_end >= 0:
+                        submitted = body[value_start + 4:value_end].decode("utf-8", errors="replace")
+        if not verify_double_submit(request.cookies.get(CSRF_COOKIE_NAME), submitted):
+            return JSONResponse({"detail": "CSRF token validation failed."}, status_code=403)
     if _cross_site_unsafe_request(request):
         return JSONResponse({"detail": "요청 출처를 확인할 수 없습니다."}, status_code=403)
     if _rate_limited(request):
@@ -165,6 +194,17 @@ async def add_security_headers(request: Request, call_next):
             headers={"Retry-After": "60"},
         )
     response = await call_next(request)
+    token = getattr(request.state, "csrf_token", "")
+    if token and request.cookies.get(CSRF_COOKIE_NAME) != token:
+        response.set_cookie(
+            CSRF_COOKIE_NAME,
+            token,
+            max_age=60 * 60 * 2,
+            httponly=False,
+            secure=request.url.scheme == "https",
+            samesite="strict",
+        )
+    response.headers["X-Request-ID"] = request_id
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -175,11 +215,18 @@ async def add_security_headers(request: Request, call_next):
         "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; "
         "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
     )
-    settings = get_settings()
     if settings.review_mode or settings.beta_noindex:
         response.headers.setdefault("X-Robots-Tag", "noindex, noarchive")
     if settings.review_mode:
         response.headers.setdefault("X-Review-Mode", "true")
+    LOGGER.info(json.dumps({
+        "event": "http_request",
+        "request_id": request_id,
+        "method": request.method,
+        "path": request.url.path,
+        "status": response.status_code,
+        "duration_ms": round((time.monotonic() - started) * 1000, 2),
+    }, ensure_ascii=False))
     return response
 
 
@@ -224,12 +271,17 @@ def decode_session_cookie(value: str | None) -> dict:
 def get_current_user(request: Request, session):
     session_data = decode_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
     session_id = str(session_data.get("sid") or "")
-    if session_id:
-        with _REVOKED_SESSION_LOCK:
-            if session_id in _REVOKED_SESSION_IDS:
-                return None
+    if session_id and get_security_state_store().is_session_revoked(session_id):
+        return None
     user_id = session_data.get("user_id")
-    return get_user_by_id(session, int(user_id)) if user_id else None
+    user = get_user_by_id(session, int(user_id)) if user_id else None
+    if user is None or not user.is_active or user.account_status != "active":
+        return None
+    if user.beta_expires_at:
+        expires = user.beta_expires_at if user.beta_expires_at.tzinfo else user.beta_expires_at.replace(tzinfo=timezone.utc)
+        if expires <= datetime.now(timezone.utc):
+            return None
+    return user
 
 
 def require_user(request: Request, session):
@@ -508,7 +560,56 @@ register_document_routes(
 
 @app.on_event("startup")
 def on_startup() -> None:
+    problems = validate_runtime_config()
+    if problems:
+        raise RuntimeError("Unsafe runtime configuration: " + "; ".join(problems))
     init_db()
+    settings = get_settings()
+    LOGGER.info(json.dumps({
+        "event": "startup_audit",
+        "app_env": settings.app_env,
+        "review_mode": settings.review_mode,
+        "beta_mode": settings.beta_mode,
+        "beta_noindex": settings.beta_noindex,
+        "db_backend": settings.db_url.split(":", 1)[0],
+        "security_store_backend": type(get_security_state_store()).__name__,
+        "redis_configured": bool(settings.redis_url),
+        "onbid_key_configured": bool(settings.onbid_api_key),
+    }))
+
+
+@app.get("/health/live")
+def health_live():
+    return {"status": "live", "uptime_seconds": int(time.monotonic() - STARTED_AT)}
+
+
+@app.get("/health/ready")
+def health_ready():
+    checks: dict[str, object] = {"config": not validate_runtime_config()}
+    try:
+        with session_scope() as session:
+            session.execute(select(1))
+            checks["database"] = True
+            checks["public_onbid_count"] = count_auction_items(session, public_only=True)
+        get_security_state_store().cleanup_expired()
+        checks["security_state"] = True
+        checks["last_successful_sync"] = latest_successful_sync()
+    except Exception:
+        checks["database"] = False
+        checks["security_state"] = False
+    ready = bool(checks.get("config") and checks.get("database") and checks.get("security_state"))
+    return JSONResponse({"status": "ready" if ready else "not_ready", "checks": checks}, status_code=200 if ready else 503)
+
+
+@app.get("/health/version")
+def health_version():
+    settings = get_settings()
+    return {
+        "version": settings.app_version,
+        "git_commit": settings.app_git_commit,
+        "environment": settings.app_env,
+        "build_time": settings.app_build_time,
+    }
 
 
 @app.get("/")
@@ -732,7 +833,14 @@ def login_submit(
         user = authenticate_user(session, username, password)
         if user is None:
             return RedirectResponse(url="/login?error=1", status_code=303)
-        response = RedirectResponse(url=safe_local_path(next_url, "/user"), status_code=303)
+        settings = get_settings()
+        needs_consent = (
+            user.terms_version_accepted != settings.terms_version
+            or user.privacy_version_accepted != settings.privacy_version
+            or user.beta_notice_version_accepted != settings.beta_notice_version
+        )
+        target = "/account/password" if user.must_change_password else ("/account/consent" if needs_consent else safe_local_path(next_url, "/user"))
+        response = RedirectResponse(url=target, status_code=303)
         expires_at = int(datetime.now(timezone.utc).timestamp()) + SESSION_MAX_AGE_SECONDS
         response.set_cookie(
             SESSION_COOKIE_NAME,
@@ -745,13 +853,12 @@ def login_submit(
         return response
 
 
-@app.get("/logout")
+@app.post("/logout")
 def logout(request: Request) -> RedirectResponse:
     session_data = decode_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
     session_id = str(session_data.get("sid") or "")
     if session_id:
-        with _REVOKED_SESSION_LOCK:
-            _REVOKED_SESSION_IDS.add(session_id)
+        get_security_state_store().revoke_session(session_id, SESSION_MAX_AGE_SECONDS)
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response
@@ -796,7 +903,33 @@ def change_password_submit(
             current_user.id,
             "User changed own password",
         )
-    return RedirectResponse(url="/account/password?success=1", status_code=303)
+    return RedirectResponse(url="/account/consent", status_code=303)
+
+
+@app.get("/account/consent")
+def account_consent_page(request: Request):
+    with session_scope() as session:
+        current_user = require_user(request, session)
+        if current_user is None:
+            return login_redirect("/account/consent")
+        return templates.TemplateResponse(
+            request,
+            "auth/consent.html",
+            {"current_user": current_user, "settings": get_settings()},
+        )
+
+
+@app.post("/account/consent")
+def account_consent_submit(request: Request, accept: str = Form(...)):
+    with session_scope() as session:
+        current_user = require_user(request, session)
+        if current_user is None:
+            return login_redirect("/account/consent")
+        if accept != "yes":
+            raise HTTPException(status_code=400, detail="Policy consent is required for beta access.")
+        accept_current_policies(session, current_user)
+        create_audit_log(session, current_user.id, "USER_POLICY_CONSENT", "user", current_user.id, "User accepted current policy versions")
+    return RedirectResponse(url="/user", status_code=303)
 
 
 @app.get("/user/settings")

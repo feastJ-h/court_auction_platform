@@ -52,9 +52,14 @@ def build_query_href(
     omit: set[str] | None = None,
     **updates: object,
 ) -> str:
-    merged = dict(state or {})
+    omitted = omit or set()
+    merged = {
+        key: value
+        for key, value in (state or {}).items()
+        if key not in omitted
+    }
     merged.update(updates)
-    cleaned = clean_query_state(merged, omit=omit)
+    cleaned = clean_query_state(merged)
     query = urlencode(cleaned, doseq=True)
     return f"{base_path}?{query}" if query else base_path
 

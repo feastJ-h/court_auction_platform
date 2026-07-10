@@ -35,7 +35,8 @@
               <p class="mt-2 text-sm text-zinc-600">{{ event.asset.main_category }} / {{ event.asset.sub_category }} / {{ event.asset.address }}</p>
               <p class="mt-2 text-sm text-zinc-500">입찰 {{ analysis.bidding_date if analysis else '미정' }} / {{ event.notice_date }}</p>
             </div>
-            <form action="/user/events/{{ event.id }}/unpass" method="post">
+<form action="/user/events/{{ event.id }}/unpass" method="post">
+                {% include "shared/csrf.html" %}
               <button class="rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" type="submit">다시 보기</button>
             </form>
           </div>

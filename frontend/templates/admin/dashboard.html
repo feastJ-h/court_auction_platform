@@ -12,6 +12,14 @@
   <main class="mx-auto max-w-7xl px-5 py-8">
     {% include "shared/breadcrumbs.html" %}
     {% include "shared/admin_nav.html" %}
+    {% if operations_status %}
+      <section class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-4" data-operations-readiness-summary="true">
+        <h2 class="font-black text-emerald-950">Beta operations readiness</h2>
+        <p class="mt-1 text-sm text-emerald-900">{{ operations_status.version }} · {{ operations_status.commit }} · {{ operations_status.environment }} · {{ operations_status.security_store }}</p>
+        <p class="mt-1 text-sm text-emerald-900">Public ONBID {{ operations_status.public_counts.all }} · real estate {{ operations_status.public_counts.real_estate }} · movable {{ operations_status.public_counts.movable }} · national property {{ operations_status.public_counts.national_property }}</p>
+        {% if operations_status.latest_sync %}<p class="mt-1 text-xs text-emerald-800">Last successful sync {{ operations_status.latest_sync.finished_at }}</p>{% else %}<p class="mt-1 text-xs text-amber-900">No successful v011 sync run recorded yet.</p>{% endif %}
+      </section>
+    {% endif %}
     <header class="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
       <div>
         <p class="text-sm font-semibold text-indigo-700">Admin Console</p>
@@ -201,7 +209,8 @@
           <h2 class="mt-1 text-xl font-black">기본 분석 도구</h2>
           <p class="mt-2 text-sm text-zinc-600">신규 기본 분석은 현재 선택된 도구를 사용합니다.</p>
         </div>
-        <form action="/admin/analysis-provider" method="post" class="flex flex-wrap items-center gap-3">
+<form action="/admin/analysis-provider" method="post" class="flex flex-wrap items-center gap-3">
+            {% include "shared/csrf.html" %}
           <select id="analysis_provider" name="analysis_provider" class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm font-bold">
             <option value="chatgpt" {% if current_provider == 'chatgpt' or current_provider == 'openai' %}selected{% endif %}>ChatGPT</option>
             <option value="gemini" {% if current_provider == 'gemini' %}selected{% endif %}>Gemini</option>
@@ -415,7 +424,8 @@
           </div>
 
           <div class="grid gap-4 border-b border-zinc-200 bg-zinc-50 p-5 lg:grid-cols-[1fr_0.8fr]">
-            <form action="/admin/events/{{ event.id }}/metadata" method="post" class="rounded-md border border-zinc-200 bg-white p-4">
+<form action="/admin/events/{{ event.id }}/metadata" method="post" class="rounded-md border border-zinc-200 bg-white p-4">
+                  {% include "shared/csrf.html" %}
               <p class="text-sm font-black text-zinc-900">메타데이터 보정</p>
               <div class="mt-3 grid gap-2 md:grid-cols-4">
                 <label class="block">
@@ -565,7 +575,8 @@
                             </div>
                           </details>
                         {% endif %}
-                        <form action="/admin/analysis-results/{{ result.id }}/reviews" method="post" class="review-form mt-3 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+<form action="/admin/analysis-results/{{ result.id }}/reviews" method="post" class="review-form mt-3 space-y-2 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+                      {% include "shared/csrf.html" %}
                           <p class="text-xs font-black text-zinc-700">관리자 검수 입력</p>
                           <div class="grid grid-cols-5 gap-1 text-[11px]">
                             {% for name, label in [('price_score','가격'), ('date_score','날짜'), ('risk_score','리스크'), ('evidence_score','근거'), ('hallucination_score','환각')] %}

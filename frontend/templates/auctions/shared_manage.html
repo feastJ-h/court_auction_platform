@@ -33,7 +33,8 @@
             <div class="flex flex-wrap gap-2">
               {% if share.is_active %}
                 <a class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" href="/onbid/share/{{ share.token }}">열기</a>
-                <form action="/my/onbid/shared-summaries/{{ share.token }}/revoke" method="post">
+<form action="/my/onbid/shared-summaries/{{ share.token }}/revoke" method="post">
+                {% include "shared/csrf.html" %}
                   <button class="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-black text-red-800" type="submit">공유 취소</button>
                 </form>
               {% else %}

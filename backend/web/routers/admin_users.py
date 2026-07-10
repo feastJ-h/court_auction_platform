@@ -62,6 +62,7 @@ def register_admin_user_routes(
                     password=password,
                     display_name=display_name,
                     role=role,
+                    created_by_admin_id=current_user.id,
                 )
                 create_audit_log(
                     session,

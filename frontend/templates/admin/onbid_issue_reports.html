@@ -42,7 +42,8 @@
                 {% if report.note %}<p class="mt-2 rounded-md bg-zinc-50 p-3 text-sm text-zinc-700">{{ report.note }}</p>{% endif %}
                 <a class="mt-2 inline-flex text-sm font-bold text-emerald-700" href="/onbid/{{ report.auction_item_id }}">물건 상세</a>
               </div>
-              <form class="flex gap-2" action="/admin/onbid-issue-reports/{{ report.id }}/status" method="post">
+<form class="flex gap-2" action="/admin/onbid-issue-reports/{{ report.id }}/status" method="post">
+                  {% include "shared/csrf.html" %}
                 <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="status">
                   {% for value in status_options %}
                     <option value="{{ value }}" {% if report.status == value %}selected{% endif %}>{{ value }}</option>

@@ -170,7 +170,15 @@ with session_scope() as db:
                 page.fill('input[name="username"]', username)
                 page.fill('input[name="password"]', password)
                 page.click('button[type="submit"]')
-                page.wait_for_url(f"http://127.0.0.1:{port}/onbid")
+                page.wait_for_url(f"http://127.0.0.1:{port}/account/password")
+                new_password = secrets.token_urlsafe(20)
+                page.fill('input[name="current_password"]', password)
+                page.fill('input[name="new_password"]', new_password)
+                page.click('button[type="submit"]')
+                page.wait_for_url(f"http://127.0.0.1:{port}/account/consent")
+                page.click('form[action="/account/consent"] button[type="submit"]')
+                page.wait_for_url(f"http://127.0.0.1:{port}/user")
+                page.goto(f"http://127.0.0.1:{port}/onbid")
                 card = page.locator('[data-review-card="true"]').first
                 expect(card).to_be_visible()
 

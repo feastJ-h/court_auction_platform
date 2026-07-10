@@ -20,7 +20,8 @@
       {% if error %}
         <div class="mt-4 rounded-md border border-rose-200 bg-rose-50 p-3 text-sm font-bold text-rose-800">아이디 또는 비밀번호가 올바르지 않습니다.</div>
       {% endif %}
-      <form action="/login" method="post" class="mt-5 space-y-4">
+<form action="/login" method="post" class="mt-5 space-y-4">
+        {% include "shared/csrf.html" %}
         <input type="hidden" name="next_url" value="{{ next_url }}">
         <label class="block">
           <span class="text-sm font-bold text-zinc-700">아이디</span>

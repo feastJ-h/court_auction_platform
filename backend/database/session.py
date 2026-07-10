@@ -33,6 +33,66 @@ def ensure_schema_migrations(db_engine: Engine) -> None:
         return
 
     with db_engine.begin() as connection:
+        user_columns = {
+            row[1]
+            for row in connection.execute(text("PRAGMA table_info(users)")).fetchall()
+        }
+        user_migrations = {
+            "account_status": "ALTER TABLE users ADD COLUMN account_status TEXT NOT NULL DEFAULT 'active'",
+            "must_change_password": "ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0",
+            "terms_version_accepted": "ALTER TABLE users ADD COLUMN terms_version_accepted TEXT NOT NULL DEFAULT ''",
+            "privacy_version_accepted": "ALTER TABLE users ADD COLUMN privacy_version_accepted TEXT NOT NULL DEFAULT ''",
+            "beta_notice_version_accepted": "ALTER TABLE users ADD COLUMN beta_notice_version_accepted TEXT NOT NULL DEFAULT ''",
+            "accepted_at": "ALTER TABLE users ADD COLUMN accepted_at DATETIME NULL",
+            "last_login_at": "ALTER TABLE users ADD COLUMN last_login_at DATETIME NULL",
+            "failed_login_count": "ALTER TABLE users ADD COLUMN failed_login_count INTEGER NOT NULL DEFAULT 0",
+            "locked_until": "ALTER TABLE users ADD COLUMN locked_until DATETIME NULL",
+            "beta_expires_at": "ALTER TABLE users ADD COLUMN beta_expires_at DATETIME NULL",
+            "created_by_admin_id": "ALTER TABLE users ADD COLUMN created_by_admin_id INTEGER NULL",
+        }
+        for column_name, ddl in user_migrations.items():
+            if column_name not in user_columns:
+                connection.execute(text(ddl))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_users_account_status ON users(account_status)"))
+
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS security_revoked_sessions (
+                session_hash TEXT PRIMARY KEY,
+                expires_at TEXT NOT NULL
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_security_revoked_expires ON security_revoked_sessions(expires_at)"))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS security_rate_limits (
+                scope TEXT NOT NULL,
+                subject_hash TEXT NOT NULL,
+                window_start INTEGER NOT NULL,
+                count INTEGER NOT NULL DEFAULT 0,
+                expires_at TEXT NOT NULL,
+                PRIMARY KEY(scope, subject_hash, window_start)
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_security_rate_expires ON security_rate_limits(expires_at)"))
+        connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS onbid_sync_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                run_id TEXT NOT NULL UNIQUE,
+                api_kind TEXT NOT NULL,
+                started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                finished_at DATETIME NULL,
+                status TEXT NOT NULL DEFAULT 'running',
+                fetched INTEGER NOT NULL DEFAULT 0,
+                inserted INTEGER NOT NULL DEFAULT 0,
+                updated INTEGER NOT NULL DEFAULT 0,
+                duplicates INTEGER NOT NULL DEFAULT 0,
+                dropped_stale INTEGER NOT NULL DEFAULT 0,
+                dropped_unknown INTEGER NOT NULL DEFAULT 0,
+                error_code TEXT NOT NULL DEFAULT '',
+                error_summary_sanitized TEXT NOT NULL DEFAULT ''
+            )
+        """))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_sync_runs_status ON onbid_sync_runs(status)"))
+        connection.execute(text("CREATE INDEX IF NOT EXISTS ix_onbid_sync_runs_started_at ON onbid_sync_runs(started_at)"))
         ai_columns = {
             row[1]
             for row in connection.execute(text("PRAGMA table_info(ai_analyses)")).fetchall()

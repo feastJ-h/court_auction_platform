@@ -11,5 +11,5 @@ def test_session_cookie_has_expiry_rotation_and_secure_controls():
 
 def test_logout_revokes_current_session_identifier():
     app = source("main_app.py")
-    assert "_REVOKED_SESSION_IDS.add(session_id)" in app
-    assert "session_id in _REVOKED_SESSION_IDS" in app
+    assert "get_security_state_store().revoke_session(session_id" in app
+    assert "get_security_state_store().is_session_revoked(session_id)" in app

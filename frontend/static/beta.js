@@ -1,10 +1,15 @@
 (() => {
+  function csrfToken() {
+    const row = document.cookie.split("; ").find((value) => value.startsWith("court_csrf="));
+    return row ? decodeURIComponent(row.split("=").slice(1).join("=")) : "";
+  }
+
   function trackEvent(eventName, metadata = {}) {
     fetch("/api/product-events", {
       method: "POST",
       credentials: "same-origin",
       keepalive: true,
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRF-Token": csrfToken() },
       body: JSON.stringify({ event_name: eventName, ...metadata }),
     }).catch(() => {});
   }
@@ -39,7 +44,7 @@
     const response = await fetch(`/api/onbid/${itemId}/preference`, {
       method: "POST",
       credentials: "same-origin",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      headers: { "Content-Type": "application/json", "Accept": "application/json", "X-CSRF-Token": csrfToken() },
       body: JSON.stringify(payload),
     });
     if (!response.ok) throw new Error(`preference request failed: ${response.status}`);

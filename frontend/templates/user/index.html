@@ -22,7 +22,7 @@
         {% if current_user.role == 'admin' %}
           <a class="shrink-0 rounded-md border border-indigo-300 bg-indigo-50 px-3 py-2 text-indigo-800" href="/admin">Admin</a>
         {% endif %}
-        <a class="shrink-0 rounded-md border border-zinc-300 px-3 py-2 text-zinc-800" href="/logout">로그아웃</a>
+<form action="/logout" method="post">{% include "shared/csrf.html" %}<button class="shrink-0 rounded-md border border-zinc-300 px-3 py-2 text-zinc-800" type="submit">로그아웃</button></form>
       </div>
     </nav>
   </header>
@@ -83,12 +83,15 @@
               </button>
               <div class="mt-2 grid grid-cols-3 gap-2">
                 <form action="/user/events/{{ event.id }}/bookmark" method="post">
+                  {% include "shared/csrf.html" %}
                   <button class="w-full rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-800 hover:border-emerald-500" type="submit">관심</button>
                 </form>
                 <form action="/user/events/{{ event.id }}/watch" method="post">
+                  {% include "shared/csrf.html" %}
                   <button class="w-full rounded-md border border-blue-300 bg-blue-50 px-3 py-2 text-xs font-black text-blue-800 hover:border-blue-500" type="submit">지켜보기</button>
                 </form>
                 <form action="/user/events/{{ event.id }}/pass" method="post">
+                  {% include "shared/csrf.html" %}
                   <button class="w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-xs font-black text-zinc-700 hover:border-zinc-500" type="submit">패스</button>
                 </form>
               </div>

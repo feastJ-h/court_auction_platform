@@ -18,7 +18,7 @@ from backend.services.analysis_reviews import (
     build_analysis_review_summary,
     list_recent_analysis_reviews,
 )
-from backend.services.auction_items import count_auction_items
+from backend.services.auction_items import count_auction_items, get_onbid_category_counts
 from backend.services.audit_logs import list_recent_audit_logs
 from backend.services.collection_quality import build_collection_quality_summary
 from backend.services.crawl_runs import build_crawl_run_summary
@@ -31,6 +31,8 @@ from backend.services.product_engagement import (
     parse_issue_types,
     update_data_issue_report_status,
 )
+from backend.services.onbid_sync_runs import latest_successful_sync
+from backend.services.security_state import get_security_state_store
 from backend.web.dependencies import (
     AdminFilter,
     AttachAnalysisResults,
@@ -129,6 +131,14 @@ def register_admin_operation_routes(
                         "job_status": job_status,
                         "model": model,
                         "parse_status": parse_status,
+                    },
+                    "operations_status": {
+                        "version": settings.app_version,
+                        "commit": settings.app_git_commit,
+                        "environment": settings.app_env,
+                        "public_counts": get_onbid_category_counts(session, public_only=True),
+                        "latest_sync": latest_successful_sync(),
+                        "security_store": type(get_security_state_store()).__name__,
                     },
                 },
             )

@@ -67,13 +67,15 @@
                 <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="/onbid/{{ item.id }}/original-link" target="_blank" rel="noopener noreferrer">원문 보기</a>
               {% endif %}
               {% if current_user %}
-                <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="favorite">
+<form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="favorite">
+                    {% include "shared/csrf.html" %}
                   <input type="hidden" name="action" value="favorite">
                   <input type="hidden" name="enabled" value="true">
                   <input type="hidden" name="next_url" value="/onbid/today">
                   <button class="rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-800" type="submit">관심</button>
                 </form>
-                <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="passed">
+<form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="passed">
+                    {% include "shared/csrf.html" %}
                   <input type="hidden" name="action" value="passed">
                   <input type="hidden" name="enabled" value="true">
                   <input type="hidden" name="next_url" value="/onbid/today">

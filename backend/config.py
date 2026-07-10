@@ -9,6 +9,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
+    app_env: str = Field(default="development", alias="APP_ENV")
     db_url: str = Field(default="sqlite:///./auction_data.db", alias="DB_URL")
     gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     gemini_model: str = Field(default="gemini-1.5-flash-latest", alias="GEMINI_MODEL")
@@ -56,6 +57,13 @@ class Settings(BaseSettings):
     product_name: str = Field(default="Court Auction Platform", alias="PRODUCT_NAME")
     local_dev_login_hint: bool = Field(default=False, alias="LOCAL_DEV_LOGIN_HINT")
     review_show_sample: bool = Field(default=False, alias="REVIEW_SHOW_SAMPLE")
+    redis_url: str = Field(default="", alias="REDIS_URL")
+    app_version: str = Field(default="v011", alias="APP_VERSION")
+    app_git_commit: str = Field(default="unknown", alias="APP_GIT_COMMIT")
+    app_build_time: str = Field(default="unknown", alias="APP_BUILD_TIME")
+    terms_version: str = Field(default="2026-07-10", alias="TERMS_VERSION")
+    privacy_version: str = Field(default="2026-07-10", alias="PRIVACY_VERSION")
+    beta_notice_version: str = Field(default="2026-07-10", alias="BETA_NOTICE_VERSION")
 
     model_config = SettingsConfigDict(
         env_file=str(PROJECT_ROOT / ".env"),
@@ -87,3 +95,24 @@ def resolve_db_url(db_url: str) -> str:
         return db_url
     relative = db_url.replace("sqlite:///./", "", 1)
     return f"sqlite:///{PROJECT_ROOT / relative}"
+
+
+def validate_runtime_config(settings: Settings | None = None) -> list[str]:
+    """Return launch-blocking configuration problems without exposing secrets."""
+    current = settings or get_settings()
+    env = current.app_env.strip().lower()
+    problems: list[str] = []
+    if env not in {"development", "beta", "production"}:
+        problems.append("APP_ENV must be development, beta, or production")
+        return problems
+    if env in {"beta", "production"}:
+        if current.app_secret_key == "local-dev-change-me" or len(current.app_secret_key) < 32:
+            problems.append("APP_SECRET_KEY is default or too short")
+        if current.initial_admin_password == "admin1234!":
+            problems.append("INITIAL_ADMIN_PASSWORD is the development default")
+        lowered_db = current.db_url.lower()
+        if "test" in lowered_db or ":memory:" in lowered_db:
+            problems.append("DB_URL points to a test database")
+        if current.local_dev_login_hint:
+            problems.append("LOCAL_DEV_LOGIN_HINT must be disabled")
+    return problems

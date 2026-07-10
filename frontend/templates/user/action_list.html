@@ -41,19 +41,23 @@
             <div class="flex flex-wrap gap-2">
               {% if action_type == 'BOOKMARKED' %}
                 <form action="/user/events/{{ event.id }}/unbookmark" method="post">
+                  {% include "shared/csrf.html" %}
                   <button class="rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" type="submit">관심 해제</button>
                 </form>
               {% elif action_type == 'WATCHING' %}
                 <form action="/user/events/{{ event.id }}/unwatch" method="post">
+                  {% include "shared/csrf.html" %}
                   <button class="rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" type="submit">지켜보기 해제</button>
                 </form>
               {% endif %}
               <form action="/user/events/{{ event.id }}/pass" method="post">
+                {% include "shared/csrf.html" %}
                 <button class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" type="submit">패스</button>
               </form>
             </div>
           </div>
           <form action="/user/events/{{ event.id }}/note" method="post" class="mt-4 rounded-md border border-zinc-200 bg-zinc-50 p-3">
+            {% include "shared/csrf.html" %}
             <input type="hidden" name="next_url" value="{{ return_url }}">
             <div class="grid gap-2 md:grid-cols-[220px_1fr_auto] md:items-start">
               <input name="tags" value="{{ event.user_tags }}" placeholder="태그" class="rounded-md border border-zinc-300 px-3 py-2 text-sm">

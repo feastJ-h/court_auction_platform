@@ -357,14 +357,10 @@ def evaluate_onbid_payload_freshness(payload_or_item: Any, *, min_date: str | No
 def is_onbid_item_public_visible(item: AuctionItem, *, min_date: str | None = None) -> bool:
     if not get_settings().review_show_sample and is_onbid_sample_item(item):
         return False
-    status = getattr(item, "freshness_status", "") or ""
-    freshness_date = getattr(item, "freshness_date", "") or ""
-    if freshness_date and is_implausible_onbid_public_date(parse_onbid_date(freshness_date)):
-        return False
-    if not freshness_date or status in (FRESHNESS_UNKNOWN, FRESHNESS_INVALID):
-        freshness = evaluate_onbid_payload_freshness(item, min_date=min_date)
-        status = freshness["freshness_status"]
-    return status == FRESHNESS_FRESH
+    # Derive visibility from current source dates on every public read. Stored
+    # status is an audit/cache field and may lag a newer bid date.
+    freshness = evaluate_onbid_payload_freshness(item, min_date=min_date)
+    return freshness["freshness_status"] == FRESHNESS_FRESH
 
 
 def build_onbid_info_badges(item: AuctionItem) -> dict[str, Any]:
@@ -938,50 +934,10 @@ def apply_onbid_category_filter(statement, category: str):
     normalized = normalize_public_category(category)
     if normalized in ("", "all"):
         return statement
-    if normalized == "national_property":
-        return statement.where(
-            or_(
-                AuctionItem.public_category == "national_property",
-                AuctionItem.raw_payload.like("%national_property%"),
-                AuctionItem.raw_payload.like("%bid_target%"),
-                AuctionItem.raw_payload.like("%국유%"),
-            )
-        )
-    real_estate_condition = or_(
-        AuctionItem.asset_type.like("%Real estate%"),
-        AuctionItem.asset_type.like("%부동산%"),
-        AuctionItem.asset_type.like("%토지%"),
-        AuctionItem.asset_type.like("%건물%"),
-        AuctionItem.usage.like("%부동산%"),
-        AuctionItem.usage.like("%토지%"),
-        AuctionItem.usage.like("%건물%"),
-        AuctionItem.raw_payload.like("%real_estate%"),
-        AuctionItem.public_category == "real_estate",
-    )
-    movable_condition = or_(
-        AuctionItem.asset_type.like("%Movable%"),
-        AuctionItem.asset_type.like("%동산%"),
-        AuctionItem.asset_type.like("%차량%"),
-        AuctionItem.asset_type.like("%기계%"),
-        AuctionItem.usage.like("%차량%"),
-        AuctionItem.usage.like("%기계%"),
-        AuctionItem.usage.like("%장비%"),
-        AuctionItem.raw_payload.like("%movable%"),
-        AuctionItem.public_category == "movable",
-    )
-    if normalized == "real_estate":
-        return statement.where(real_estate_condition)
-    if normalized == "movable":
-        return statement.where(movable_condition)
-    if normalized == "other":
-        return statement.where(
-            ~real_estate_condition,
-            ~movable_condition,
-            ~AuctionItem.raw_payload.like("%national_property%"),
-            ~AuctionItem.raw_payload.like("%bid_target%"),
-            or_(AuctionItem.public_category == "other", AuctionItem.public_category == ""),
-        )
-    return statement
+    # Ingestion/audit owns classification. The public route uses the persisted
+    # facet as its single source of truth so a raw text match cannot leak a card
+    # into another category.
+    return statement.where(AuctionItem.public_category == normalized)
 
 
 def apply_public_onbid_freshness_filter(statement, *, min_date: str | None = None):
@@ -1265,7 +1221,7 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
     discount = calculate_discount_rate(item.appraisal_price, item.minimum_bid_price)
     minimum_rate = calculate_minimum_price_rate(item.appraisal_price, item.minimum_bid_price)
     score, reasons = calculate_liquidation_score(item)
-    category = derive_onbid_category(item)
+    category = normalize_public_category(item.public_category or derive_onbid_category(item))
     info_badges = build_onbid_info_badges(item)
     deadline_status = calculate_d_day(item.bid_end_at)
     raw_status = (item.status or "").strip()

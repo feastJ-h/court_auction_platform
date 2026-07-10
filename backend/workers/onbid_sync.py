@@ -5,6 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from backend.database.session import init_db, session_scope
+from backend.services.onbid_sync_runs import finish_sync_run, start_sync_run
 from backend.database.models import CrawlRun
 from backend.onbid.client import DEFAULT_ONBID_PUBLIC_PRPT_DIV_CD, OnbidClient, first_value, normalize_onbid_api_item
 from backend.services.auction_items import (
@@ -56,6 +57,7 @@ def run_onbid_sync(
             log_path=log_path,
         )
         run_id = run.id
+    start_sync_run(str(run_id), api_kind)
 
     try:
         client = OnbidClient()
@@ -185,6 +187,16 @@ def run_onbid_sync(
                 documents_inserted=created_count + notice_inserted + notice_item_inserted,
                 duplicates_skipped=duplicate_count + notice_updated + notice_item_duplicates,
             )
+        finish_sync_run(
+            str(run_id),
+            status="succeeded",
+            fetched=payload_freshness["input"] + notice_freshness["input"],
+            inserted=created_count + notice_inserted + notice_item_inserted,
+            updated=notice_updated + notice_item_link_updates,
+            duplicates=duplicate_count + notice_item_duplicates,
+            dropped_stale=payload_freshness["dropped_stale"] + notice_freshness["dropped_stale"] + notice_freshness["dropped_stale_items"],
+            dropped_unknown=payload_freshness["dropped_unknown_date"] + notice_freshness["dropped_unknown_date"] + notice_freshness["dropped_unknown_date_items"],
+        )
         return {
             "status": "SUCCEEDED",
             "run_id": run_id,
@@ -218,6 +230,7 @@ def run_onbid_sync(
         with session_scope() as session:
             run = session.get(CrawlRun, run_id)
             finish_crawl_run(session, run, status="FAILED", error_message=str(exc))
+        finish_sync_run(str(run_id), status="failed", error_code=type(exc).__name__, error_summary=str(exc))
         return {"status": "FAILED", "run_id": run_id, "error": str(exc)}
 
 

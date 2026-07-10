@@ -41,16 +41,19 @@
             <div class="flex flex-wrap gap-2">
               {% if preference_type == 'passed' %}
                 <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="passed">
+                  {% include "shared/csrf.html" %}
                   <input type="hidden" name="action" value="passed"><input type="hidden" name="enabled" value="false"><input type="hidden" name="next_url" value="/my/onbid/passed">
                   <button class="min-h-11 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-900" type="submit">패스 복구</button>
                 </form>
               {% elif preference_type == 'favorites' %}
                 <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="favorite">
+                  {% include "shared/csrf.html" %}
                   <input type="hidden" name="action" value="favorite"><input type="hidden" name="enabled" value="false"><input type="hidden" name="next_url" value="/my/onbid/favorites">
                   <button class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" type="submit">관심 해제</button>
                 </form>
               {% elif preference_type == 'watching' %}
                 <form action="/onbid/{{ item.id }}/preference" method="post">
+                  {% include "shared/csrf.html" %}
                   <input type="hidden" name="action" value="watching"><input type="hidden" name="enabled" value="false"><input type="hidden" name="next_url" value="/my/onbid/watching">
                   <button class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" type="submit">감시 해제</button>
                 </form>

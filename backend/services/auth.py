@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import secrets
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -57,10 +58,32 @@ def list_users(session: Session) -> list[User]:
 
 def authenticate_user(session: Session, username: str, password: str) -> User | None:
     user = get_user_by_username(session, username.strip())
-    if user is None or not user.is_active:
+    now = datetime.now(timezone.utc)
+    if user is None:
+        return None
+    locked_until = user.locked_until
+    if locked_until is not None and locked_until.tzinfo is None:
+        locked_until = locked_until.replace(tzinfo=timezone.utc)
+    expires_at = user.beta_expires_at
+    if expires_at is not None and expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if (
+        not user.is_active
+        or user.account_status != "active"
+        or (locked_until is not None and locked_until > now)
+        or (expires_at is not None and expires_at <= now)
+    ):
         return None
     if not verify_password(password, user.password_hash):
+        user.failed_login_count = int(user.failed_login_count or 0) + 1
+        if user.failed_login_count >= 5:
+            user.locked_until = now + timedelta(minutes=15)
+        session.flush()
         return None
+    user.failed_login_count = 0
+    user.locked_until = None
+    user.last_login_at = now
+    session.flush()
     return user
 
 
@@ -70,6 +93,10 @@ def create_user(
     password: str,
     display_name: str = "",
     role: str = "user",
+    *,
+    must_change_password: bool = True,
+    created_by_admin_id: int | None = None,
+    beta_expires_at: datetime | None = None,
 ) -> User:
     clean_username = username.strip()
     if not clean_username:
@@ -86,6 +113,10 @@ def create_user(
         display_name=display_name.strip() or clean_username,
         role=role,
         is_active=True,
+        account_status="active",
+        must_change_password=must_change_password,
+        created_by_admin_id=created_by_admin_id,
+        beta_expires_at=beta_expires_at,
     )
     session.add(user)
     session.flush()
@@ -98,6 +129,7 @@ def change_user_password(session: Session, user: User, current_password: str, ne
     if len(new_password) < 8:
         raise ValueError("password_too_short")
     user.password_hash = hash_password(new_password)
+    user.must_change_password = False
     session.flush()
 
 
@@ -106,6 +138,7 @@ def set_user_active(session: Session, user_id: int, is_active: bool) -> User:
     if user is None:
         raise ValueError("user_not_found")
     user.is_active = is_active
+    user.account_status = "active" if is_active else "inactive"
     session.flush()
     return user
 
@@ -121,18 +154,31 @@ def set_user_role(session: Session, user_id: int, role: str) -> User:
     return user
 
 
+def accept_current_policies(session: Session, user: User) -> None:
+    settings = get_settings()
+    user.terms_version_accepted = settings.terms_version
+    user.privacy_version_accepted = settings.privacy_version
+    user.beta_notice_version_accepted = settings.beta_notice_version
+    user.accepted_at = datetime.now(timezone.utc)
+    session.flush()
+
+
 def ensure_initial_admin(session: Session) -> User:
     settings = get_settings()
     username = settings.initial_admin_username.strip() or "admin"
     existing = get_user_by_username(session, username)
     if existing:
         return existing
+    if settings.app_env.strip().lower() in {"beta", "production"}:
+        raise RuntimeError("Initial admin is not auto-created outside development; run backend.cli.bootstrap_admin")
     admin = User(
         username=username,
         password_hash=hash_password(settings.initial_admin_password),
         display_name=settings.initial_admin_display_name or username,
         role="admin",
         is_active=True,
+        account_status="active",
+        must_change_password=True,
     )
     session.add(admin)
     session.flush()

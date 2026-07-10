@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{ title }} | Court Auction</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
 <body class="bg-zinc-50 text-zinc-950">
   {% include "shared/review_banner.html" %}
@@ -23,7 +23,7 @@
 
     <section class="space-y-3">
       {% for item in items %}
-        <article class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm">
+        <article class="rounded-md border border-zinc-200 bg-white p-4 shadow-sm" data-review-card="true" data-item-id="{{ item.id }}">
           <div class="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div>
               <div class="flex flex-wrap items-center gap-2">
@@ -39,18 +39,22 @@
               {% endif %}
             </div>
             <div class="flex flex-wrap gap-2">
-              <form action="/onbid/{{ item.id }}/preference" method="post">
-                <input type="hidden" name="action" value="favorite">
-                <input type="hidden" name="enabled" value="false">
-                <input type="hidden" name="next_url" value="/my/onbid/{{ preference_type }}">
-                <button class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" type="submit">관심 해제</button>
-              </form>
-              <form action="/onbid/{{ item.id }}/preference" method="post">
-                <input type="hidden" name="action" value="passed">
-                <input type="hidden" name="enabled" value="true">
-                <input type="hidden" name="next_url" value="/my/onbid/{{ preference_type }}">
-                <button class="rounded-md bg-zinc-900 px-4 py-2 text-sm font-black text-white" type="submit">패스</button>
-              </form>
+              {% if preference_type == 'passed' %}
+                <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="passed">
+                  <input type="hidden" name="action" value="passed"><input type="hidden" name="enabled" value="false"><input type="hidden" name="next_url" value="/my/onbid/passed">
+                  <button class="min-h-11 rounded-md border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-900" type="submit">패스 복구</button>
+                </form>
+              {% elif preference_type == 'favorites' %}
+                <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="favorite">
+                  <input type="hidden" name="action" value="favorite"><input type="hidden" name="enabled" value="false"><input type="hidden" name="next_url" value="/my/onbid/favorites">
+                  <button class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" type="submit">관심 해제</button>
+                </form>
+              {% elif preference_type == 'watching' %}
+                <form action="/onbid/{{ item.id }}/preference" method="post">
+                  <input type="hidden" name="action" value="watching"><input type="hidden" name="enabled" value="false"><input type="hidden" name="next_url" value="/my/onbid/watching">
+                  <button class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" type="submit">감시 해제</button>
+                </form>
+              {% endif %}
               <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-sm font-black text-zinc-800" href="/onbid/{{ item.id }}">상세 보기</a>
             </div>
           </div>
@@ -59,6 +63,9 @@
         <div class="rounded-md border border-dashed border-zinc-300 bg-white p-8 text-center text-zinc-500">저장된 온비드 물건이 없습니다.</div>
       {% endfor %}
     </section>
+    {% include "shared/toast.html" %}
   </main>
+  {% include "shared/legal_footer_links.html" %}
+  <script src="/static/beta.js" defer></script>
 </body>
 </html>

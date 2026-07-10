@@ -1,0 +1,38 @@
+{% if pagination.total_pages > 1 %}
+<nav class="mt-5" aria-label="페이지 이동" data-compact-pagination="true" data-nav-scope="local-filter">
+  <div class="hidden items-center justify-center gap-2 text-sm font-bold sm:flex" data-pagination-desktop="true">
+    {% if pagination.has_prev %}
+      <a class="min-h-11 rounded-md border border-zinc-300 bg-white px-3 py-2.5 hover:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-600" href="{{ pagination.prev_href }}" data-pagination-direction="previous">이전</a>
+    {% else %}
+      <span class="min-h-11 cursor-not-allowed rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2.5 text-zinc-400" aria-disabled="true">이전</span>
+    {% endif %}
+    {% for item in pagination['items'] %}
+      {% if item.type == 'ellipsis' %}
+        <span class="px-1 text-zinc-400" aria-hidden="true">…</span>
+      {% elif item.current %}
+        <span class="min-h-11 min-w-11 rounded-md bg-zinc-950 px-3 py-2.5 text-center text-white" aria-current="page">{{ item.page }}</span>
+      {% else %}
+        <a class="min-h-11 min-w-11 rounded-md border border-zinc-300 bg-white px-3 py-2.5 text-center hover:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-600" href="{{ item.href }}">{{ item.page }}</a>
+      {% endif %}
+    {% endfor %}
+    {% if pagination.has_next %}
+      <a class="min-h-11 rounded-md border border-zinc-300 bg-white px-3 py-2.5 hover:border-zinc-500 focus:outline-none focus:ring-2 focus:ring-emerald-600" href="{{ pagination.next_href }}" data-pagination-direction="next">다음</a>
+    {% else %}
+      <span class="min-h-11 cursor-not-allowed rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2.5 text-zinc-400" aria-disabled="true">다음</span>
+    {% endif %}
+  </div>
+  <div class="flex items-center justify-between gap-3 text-sm font-bold sm:hidden" data-pagination-mobile="true">
+    {% if pagination.has_prev %}
+      <a class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2.5" href="{{ pagination.prev_href }}">이전</a>
+    {% else %}
+      <span class="min-h-11 rounded-md border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-zinc-400" aria-disabled="true">이전</span>
+    {% endif %}
+    <span aria-live="polite">{{ pagination.page }} / {{ pagination.total_pages }}</span>
+    {% if pagination.has_next %}
+      <a class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2.5" href="{{ pagination.next_href }}">다음</a>
+    {% else %}
+      <span class="min-h-11 rounded-md border border-zinc-200 bg-zinc-100 px-4 py-2.5 text-zinc-400" aria-disabled="true">다음</span>
+    {% endif %}
+  </div>
+</nav>
+{% endif %}

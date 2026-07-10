@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections import Counter
 from datetime import date, datetime
 from math import ceil
-from urllib.parse import urlencode
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
@@ -35,6 +34,7 @@ from backend.web.dependencies import (
     LoginRedirect,
     RequireUser,
 )
+from backend.web.pagination import build_pagination, build_query_href
 
 
 def register_case_routes(
@@ -60,17 +60,6 @@ def register_case_routes(
         if maximum is not None and parsed > maximum:
             return maximum
         return parsed
-
-    def build_case_query_href(base_path: str, **params) -> str:
-        cleaned: dict[str, str] = {}
-        for key, value in params.items():
-            if value in (None, ""):
-                continue
-            if key == "category" and str(value).strip() == "ALL":
-                continue
-            cleaned[key] = str(value)
-        query = urlencode(cleaned)
-        return f"{base_path}?{query}" if query else base_path
 
     def _safe_external_url(value: str) -> str:
         text = str(value or "").strip()
@@ -171,21 +160,12 @@ def register_case_routes(
                     "review_mode": get_settings().review_mode,
                     "cases": views,
                     "filters": filters,
-                    "pagination": {
-                        "page": current_page,
-                        "pages": list(range(1, total_pages + 1)),
-                        "has_prev": current_page > 1,
-                        "has_next": current_page < total_pages,
-                        "prev_href": build_case_query_href("/cases", page=max(1, current_page - 1), q=filters["q"], category=filters["category"]),
-                        "next_href": build_case_query_href("/cases", page=min(total_pages, current_page + 1), q=filters["q"], category=filters["category"]),
-                        "page_links": [
-                            {
-                                "page": index,
-                                "href": build_case_query_href("/cases", page=index, q=filters["q"], category=filters["category"]),
-                            }
-                            for index in range(1, total_pages + 1)
-                        ],
-                    },
+                    "pagination": build_pagination(
+                        "/cases",
+                        current_page=current_page,
+                        total_pages=total_pages,
+                        query_state=filters,
+                    ),
                     "total_count": total_count,
                 },
             )

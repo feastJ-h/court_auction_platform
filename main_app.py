@@ -5,10 +5,15 @@ import hmac
 from html import escape
 import json
 from math import ceil
+from collections import defaultdict, deque
+from threading import Lock
+import time
+import secrets
+from urllib.parse import urlencode, urlsplit
 from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, Form, HTTPException, Query, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -31,6 +36,7 @@ from backend.services.analysis_reviews import (
     list_reviews_for_results,
 )
 from backend.services.audit_logs import create_audit_log
+from backend.services.onbid_review import select_home_preview
 from backend.services.metadata_corrections import update_event_metadata
 from backend.services.auth import (
     authenticate_user,
@@ -65,23 +71,128 @@ app.mount("/static", StaticFiles(directory=str(PROJECT_ROOT / "frontend" / "stat
 
 SESSION_COOKIE_NAME = "court_session"
 SESSION_MAX_AGE_SECONDS = 60 * 60 * 12
+_RATE_LIMIT_BUCKETS: dict[tuple[str, str], deque[float]] = defaultdict(deque)
+_RATE_LIMIT_LOCK = Lock()
+_REVOKED_SESSION_IDS: set[str] = set()
+_REVOKED_SESSION_LOCK = Lock()
+
+
+def _safe_error_response(request: Request, status_code: int, detail: str) -> Response:
+    if request.url.path.startswith("/api/") or "application/json" in request.headers.get("accept", ""):
+        return JSONResponse({"detail": detail}, status_code=status_code)
+    titles = {403: "접근할 수 없습니다", 404: "페이지를 찾을 수 없습니다", 429: "요청이 너무 많습니다", 500: "일시적인 오류가 발생했습니다"}
+    title = titles.get(status_code, "요청을 처리할 수 없습니다")
+    body = (
+        '<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+        f"<title>{status_code} | Court Auction</title></head><body>"
+        '<main style="max-width:44rem;margin:10vh auto;padding:2rem;font-family:sans-serif">'
+        f"<p>{status_code}</p><h1>{escape(title)}</h1><p>{escape(detail)}</p>"
+        '<p><a href="/">홈으로 돌아가기</a></p></main></body></html>'
+    )
+    return Response(body, status_code=status_code, media_type="text/html")
+
+
+@app.exception_handler(HTTPException)
+async def http_error_page(request: Request, exc: HTTPException):
+    messages = {
+        403: "로그인 상태와 접근 권한을 확인해 주세요.",
+        404: "주소가 변경되었거나 공개되지 않은 항목일 수 있습니다.",
+        429: "잠시 후 다시 시도해 주세요.",
+    }
+    return _safe_error_response(request, exc.status_code, messages.get(exc.status_code, "요청을 처리하지 못했습니다."))
+
+
+@app.exception_handler(Exception)
+async def unhandled_error_page(request: Request, exc: Exception):
+    return _safe_error_response(request, 500, "내부 정보는 공개하지 않습니다. 잠시 후 다시 시도해 주세요.")
+
+
+def _rate_limit_rule(request: Request) -> tuple[str, int, int] | None:
+    path = request.url.path
+    method = request.method.upper()
+    if method == "POST" and path == "/login":
+        return ("login", 10, 60)
+    if method == "POST" and (path.endswith("/issue-report") or path.endswith("/review-summary")):
+        return ("engagement", 20, 60)
+    if method == "POST" and "/shared-summaries/" in path:
+        return ("share", 20, 60)
+    if method == "GET" and path.endswith("/original-link"):
+        return ("original", 60, 60)
+    if method == "POST" and path == "/api/admin/auctions/onbid/sync":
+        return ("admin-sync", 5, 60)
+    return None
+
+
+def _rate_limited(request: Request) -> bool:
+    rule = _rate_limit_rule(request)
+    if rule is None:
+        return False
+    name, limit, window = rule
+    client = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    key = (name, client)
+    with _RATE_LIMIT_LOCK:
+        bucket = _RATE_LIMIT_BUCKETS[key]
+        while bucket and now - bucket[0] >= window:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            return True
+        bucket.append(now)
+    return False
+
+
+def _cross_site_unsafe_request(request: Request) -> bool:
+    if request.method.upper() in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+        return False
+    fetch_site = request.headers.get("sec-fetch-site", "").lower()
+    if fetch_site == "cross-site":
+        return True
+    origin = request.headers.get("origin", "")
+    if not origin:
+        return False
+    parsed = urlsplit(origin)
+    return bool(parsed.netloc and parsed.netloc.lower() != request.url.netloc.lower())
 
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    if _cross_site_unsafe_request(request):
+        return JSONResponse({"detail": "요청 출처를 확인할 수 없습니다."}, status_code=403)
+    if _rate_limited(request):
+        return JSONResponse(
+            {"detail": "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."},
+            status_code=429,
+            headers={"Retry-After": "60"},
+        )
     response = await call_next(request)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    if get_settings().review_mode:
+    response.headers.setdefault(
+        "Content-Security-Policy",
+        "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self'; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+    )
+    settings = get_settings()
+    if settings.review_mode or settings.beta_noindex:
         response.headers.setdefault("X-Robots-Tag", "noindex, noarchive")
+    if settings.review_mode:
         response.headers.setdefault("X-Review-Mode", "true")
     return response
 
 
 def login_redirect(next_url: str = "/user") -> RedirectResponse:
-    return RedirectResponse(url=f"/login?next={next_url}", status_code=303)
+    target = safe_local_path(next_url, "/user")
+    return RedirectResponse(url=f"/login?{urlencode({'next': target})}", status_code=303)
+
+
+def safe_local_path(value: str, fallback: str = "/user") -> str:
+    parsed = urlsplit(value or "")
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/") or parsed.path.startswith("//"):
+        return fallback
+    return value
 
 
 def _session_signature(payload: str) -> str:
@@ -101,13 +212,22 @@ def decode_session_cookie(value: str | None) -> dict:
     if not hmac.compare_digest(signature, _session_signature(payload)):
         return {}
     try:
-        return json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+        data = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+        expires_at = int(data.get("exp") or 0)
+        if expires_at and expires_at < int(datetime.now(timezone.utc).timestamp()):
+            return {}
+        return data
     except Exception:
         return {}
 
 
 def get_current_user(request: Request, session):
     session_data = decode_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
+    session_id = str(session_data.get("sid") or "")
+    if session_id:
+        with _REVOKED_SESSION_LOCK:
+            if session_id in _REVOKED_SESSION_IDS:
+                return None
     user_id = session_data.get("user_id")
     return get_user_by_id(session, int(user_id)) if user_id else None
 
@@ -396,11 +516,25 @@ def root(request: Request):
     with session_scope() as session:
         current_user = require_user(request, session)
         category_counts = get_onbid_category_counts(session, public_only=True)
+        active_item_views = [
+            serialize_auction_item(item)
+            for item in list_auction_items(session, public_only=True, active_only=True, sort="newest", limit=5000)
+        ]
+        today_kst = datetime.now(ZoneInfo("Asia/Seoul")).date().isoformat()
+        today_count = sum(1 for item in active_item_views if item.get("first_seen_date") == today_kst)
+        metro_count = sum(
+            1 for item in active_item_views
+            if any(region in (item.get("address") or "") for region in ("서울", "경기", "인천"))
+        )
+        low_price_count = sum(
+            1 for item in active_item_views
+            if 0 < int(item.get("minimum_bid_price") or 0) <= 100_000_000
+        )
         home_cards = [
             {
-                "title": "오늘 새로 확인된 물건",
-                "count": count_auction_items(session, public_only=True, active_only=True),
-                "description": "최근 수집 기준으로 공개 가능한 온비드 항목입니다.",
+                "title": "오늘 처음 수집된 물건",
+                "count": today_count,
+                "description": "오늘 최초 수집 시각이 기록된 공개 온비드 항목입니다.",
                 "href": "/onbid/today",
             },
             {
@@ -410,22 +544,19 @@ def root(request: Request):
                 "href": "/onbid?closing_within_days=7",
             },
             {
-                "title": "내 지역 신규 물건",
-                "count": count_auction_items(session, public_only=True, active_only=True, region="서울"),
-                "description": "비로그인 기본값은 서울/수도권 중심으로 안내합니다.",
+                "title": "서울·수도권 검토 가능",
+                "count": metro_count,
+                "description": "서울·경기·인천 소재의 현재 공개 가능한 항목입니다.",
                 "href": "/onbid?region=%EC%84%9C%EC%9A%B8",
             },
             {
                 "title": "가격 정보 있는 1억 이하",
-                "count": count_auction_items(session, public_only=True, active_only=True, price_max=100000000),
-                "description": "가격이 낮은 순으로 원문 확인 대상을 좁힙니다.",
+                "count": low_price_count,
+                "description": "최저입찰가가 확인되고 1억 원 이하인 항목입니다.",
                 "href": "/onbid?price_max=100000000",
             },
         ]
-        preview_items = [
-            serialize_auction_item(item)
-            for item in list_auction_items(session, public_only=True, active_only=True, sort="newest", limit=4)
-        ]
+        preview_items = select_home_preview(active_item_views, limit=4)
         return templates.TemplateResponse(
             request,
             "public/home.html",
@@ -440,6 +571,7 @@ def root(request: Request):
                 "home_cards": home_cards,
                 "category_counts": category_counts,
                 "preview_items": preview_items,
+                "last_data_updated": max((item.get("last_updated_at", "") for item in active_item_views), default=""),
             },
         )
 
@@ -576,7 +708,7 @@ def login_page(request: Request, next: str = Query("/user"), error: str = Query(
         request,
         "auth/login.html",
         {
-            "next_url": next if next.startswith("/") else "/user",
+            "next_url": safe_local_path(next, "/user"),
             "error": error,
             "active_section": "auth",
             "active_subsection": "",
@@ -600,19 +732,26 @@ def login_submit(
         user = authenticate_user(session, username, password)
         if user is None:
             return RedirectResponse(url="/login?error=1", status_code=303)
-        response = RedirectResponse(url=next_url if next_url.startswith("/") else "/user", status_code=303)
+        response = RedirectResponse(url=safe_local_path(next_url, "/user"), status_code=303)
+        expires_at = int(datetime.now(timezone.utc).timestamp()) + SESSION_MAX_AGE_SECONDS
         response.set_cookie(
             SESSION_COOKIE_NAME,
-            encode_session_cookie({"user_id": user.id, "username": user.username, "role": user.role}),
+            encode_session_cookie({"user_id": user.id, "username": user.username, "role": user.role, "exp": expires_at, "sid": secrets.token_urlsafe(24)}),
             max_age=SESSION_MAX_AGE_SECONDS,
             httponly=True,
             samesite="lax",
+            secure=request.url.scheme == "https",
         )
         return response
 
 
 @app.get("/logout")
 def logout(request: Request) -> RedirectResponse:
+    session_data = decode_session_cookie(request.cookies.get(SESSION_COOKIE_NAME))
+    session_id = str(session_data.get("sid") or "")
+    if session_id:
+        with _REVOKED_SESSION_LOCK:
+            _REVOKED_SESSION_IDS.add(session_id)
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE_NAME)
     return response

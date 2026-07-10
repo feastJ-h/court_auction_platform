@@ -24,6 +24,8 @@ venv/
 
 # local/runtime
 *.lock
+!package-lock.json
+node_modules/
 runtime_settings.json
 
 # bad/invalid git metadata backups

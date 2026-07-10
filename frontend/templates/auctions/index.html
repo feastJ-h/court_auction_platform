@@ -1,168 +1,142 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% include "shared/base_head.html" %}
+  <meta name="description" content="온비드 공매 물건을 분류, 지역, 가격, 자료 상태로 좁혀 원문 확인 대상을 정리합니다.">
   <title>온비드 목록 | Court Auction</title>
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/static/app.css">
 </head>
-<body class="bg-zinc-50 text-zinc-950">
+<body class="overflow-x-hidden bg-zinc-50 text-zinc-950">
   {% include "shared/review_banner.html" %}
   {% include "shared/public_nav.html" %}
-  <main class="mx-auto max-w-7xl px-4 py-6">
+  <main id="main-content" class="mx-auto max-w-7xl px-4 py-6">
     {% include "shared/breadcrumbs.html" %}
-    <header class="mb-5">
+    <header class="mb-4">
       <p class="text-sm font-black text-emerald-700">온비드 공개 목록</p>
       <h1 class="mt-1 text-2xl font-black">온비드 물건 목록</h1>
-      <p class="mt-2 text-sm text-zinc-600">공개 수집 자료를 기준으로 원문 확인이 필요한 후보를 정리합니다.</p>
+      <p class="mt-2 max-w-3xl text-sm leading-6 text-zinc-600">공개 수집 자료를 객관적인 조건으로 좁히고, 최종 확인할 후보를 정리합니다.</p>
     </header>
 
-    <nav class="mb-4 flex flex-wrap gap-2 text-sm font-bold" data-onbid-quick-nav="true">
-      <a class="rounded-md bg-zinc-950 px-4 py-2 text-white" href="/onbid/today">오늘 보기</a>
-      <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/my/onbid/favorites">내 검토함</a>
-      <a class="rounded-md border border-zinc-300 bg-white px-4 py-2 text-zinc-800" href="/onbid?data_quality=needs_confirmation">자료 확인 필요</a>
+    <section class="sticky top-0 z-20 -mx-4 mb-4 border-y border-zinc-200 bg-zinc-50/95 px-4 py-2 backdrop-blur" aria-label="온비드 분류" data-category-tabs-position="top">
+      {% include "shared/onbid_category_tabs.html" %}
+      <p class="mt-1 text-[11px] text-zinc-600">현재 검색 조건을 반영한 공개 건수입니다.</p>
+    </section>
+
+    <nav class="mb-4 flex flex-wrap gap-2 text-sm font-bold" data-onbid-quick-nav="true" aria-label="빠른 메뉴">
+      <a class="min-h-11 rounded-md bg-zinc-950 px-4 py-2.5 text-white focus:outline-none focus:ring-2 focus:ring-emerald-600" href="/onbid/today">오늘 보기</a>
+      <a class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2.5 text-zinc-800" href="/my/onbid/favorites">내 검토함</a>
+      <a class="min-h-11 rounded-md border border-zinc-300 bg-white px-4 py-2.5 text-zinc-800" href="/onbid?data_quality=needs_confirmation">자료 확인 필요</a>
     </nav>
 
-    <form class="mb-4 rounded-md border border-zinc-200 bg-white p-4" action="{{ base_path }}" data-nav-scope="local-filter" data-active-section="{{ active_section|default('') }}" data-active-category="{{ active_category|default('') }}">
-      <div class="grid gap-2 md:grid-cols-[150px_170px_170px_130px_130px_auto]">
-        <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="region" value="{{ filters.region }}" placeholder="지역">
-        <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="category">
-          <option value="all" {% if filters.category == 'all' %}selected{% endif %}>전체</option>
-          <option value="real_estate" {% if filters.category == 'real_estate' %}selected{% endif %}>부동산</option>
-          <option value="movable" {% if filters.category == 'movable' %}selected{% endif %}>동산</option>
-          <option value="national_property" {% if filters.category == 'national_property' %}selected{% endif %}>국유일반재산</option>
-          <option value="other" {% if filters.category == 'other' %}selected{% endif %}>기타</option>
-        </select>
-        <select class="rounded-md border border-zinc-300 px-3 py-2 text-sm font-bold" name="data_quality" data-data-quality-filter="true">
-          <option value="ALL" {% if filters.data_quality == 'ALL' %}selected{% endif %}>자료 상태 전체</option>
-          <option value="needs_confirmation" {% if filters.data_quality == 'needs_confirmation' %}selected{% endif %}>자료 확인 필요</option>
-        </select>
-        <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="price_min" value="{{ filters.price_min }}" placeholder="최소가">
-        <input class="rounded-md border border-zinc-300 px-3 py-2 text-sm" name="price_max" value="{{ filters.price_max }}" placeholder="최대가">
-        <button class="rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">조회</button>
+    {% if not current_user %}
+      <aside class="mb-4 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-950" data-personalization-intro="true">
+        로그인하면 관심 후보를 저장하고, 보지 않을 후보를 패스해 기본 목록에서 숨길 수 있습니다. 패스는 삭제가 아닙니다.
+      </aside>
+    {% endif %}
+
+    <details class="mb-4 rounded-md border border-zinc-200 bg-white xl:hidden" data-filter-drawer="true">
+      <summary class="min-h-11 cursor-pointer px-4 py-3 text-sm font-black">필터{% if active_filter_chips %} · {{ active_filter_chips|length }}개 적용{% endif %}</summary>
+      <form class="grid gap-3 border-t border-zinc-200 p-4" action="{{ base_path }}" data-nav-scope="local-filter">
+        <label class="grid gap-1 text-sm font-bold">지역<input class="min-h-11 rounded-md border border-zinc-300 px-3" name="region" value="{{ filters.region }}" autocomplete="address-level1"></label>
+        <label class="grid gap-1 text-sm font-bold">최소 가격<input class="min-h-11 rounded-md border border-zinc-300 px-3" name="price_min" value="{{ filters.price_min }}" inputmode="numeric"></label>
+        <label class="grid gap-1 text-sm font-bold">최대 가격<input class="min-h-11 rounded-md border border-zinc-300 px-3" name="price_max" value="{{ filters.price_max }}" inputmode="numeric"></label>
+        <label class="grid gap-1 text-sm font-bold">자료 상태<select class="min-h-11 rounded-md border border-zinc-300 px-3" name="data_quality"><option value="ALL" {% if filters.data_quality == 'ALL' %}selected{% endif %}>전체</option><option value="needs_confirmation" {% if filters.data_quality == 'needs_confirmation' %}selected{% endif %}>자료 확인 필요</option></select></label>
+        <label class="grid gap-1 text-sm font-bold">정렬<select class="min-h-11 rounded-md border border-zinc-300 px-3" name="sort"><option value="closing_soon" {% if filters.sort == 'closing_soon' %}selected{% endif %}>마감 임박순</option><option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>최근 수집순</option><option value="price_asc" {% if filters.sort == 'price_asc' %}selected{% endif %}>가격 낮은 순</option><option value="price_desc" {% if filters.sort == 'price_desc' %}selected{% endif %}>가격 높은 순</option></select></label>
+        <input type="hidden" name="category" value="{{ filters.category }}">
+        <div class="flex gap-2"><button class="min-h-11 flex-1 rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">적용</button><a class="min-h-11 rounded-md border border-zinc-300 px-4 py-2.5 text-sm font-bold" href="{{ base_path }}" data-filter-clear>초기화</a></div>
+      </form>
+    </details>
+
+    <form class="mb-4 hidden rounded-md border border-zinc-200 bg-white p-4 xl:block" action="{{ base_path }}" data-nav-scope="local-filter" data-compact-filter="true">
+      <div class="grid gap-3 xl:grid-cols-[1fr_1fr_1fr_170px_170px_auto] xl:items-end">
+        <label class="grid gap-1 text-xs font-bold text-zinc-700">지역<input class="min-h-11 rounded-md border border-zinc-300 px-3 text-sm" name="region" value="{{ filters.region }}" autocomplete="address-level1"></label>
+        <label class="grid gap-1 text-xs font-bold text-zinc-700">최소 가격<input class="min-h-11 rounded-md border border-zinc-300 px-3 text-sm" name="price_min" value="{{ filters.price_min }}" inputmode="numeric"></label>
+        <label class="grid gap-1 text-xs font-bold text-zinc-700">최대 가격<input class="min-h-11 rounded-md border border-zinc-300 px-3 text-sm" name="price_max" value="{{ filters.price_max }}" inputmode="numeric"></label>
+        <label class="grid gap-1 text-xs font-bold text-zinc-700">자료 상태<select class="min-h-11 rounded-md border border-zinc-300 px-3 text-sm font-bold" name="data_quality"><option value="ALL" {% if filters.data_quality == 'ALL' %}selected{% endif %}>전체</option><option value="needs_confirmation" {% if filters.data_quality == 'needs_confirmation' %}selected{% endif %}>자료 확인 필요</option></select></label>
+        <label class="grid gap-1 text-xs font-bold text-zinc-700">정렬<select class="min-h-11 rounded-md border border-zinc-300 px-3 text-sm font-bold" name="sort"><option value="closing_soon" {% if filters.sort == 'closing_soon' %}selected{% endif %}>마감 임박순</option><option value="newest" {% if filters.sort == 'newest' %}selected{% endif %}>최근 수집순</option><option value="price_asc" {% if filters.sort == 'price_asc' %}selected{% endif %}>가격 낮은 순</option><option value="price_desc" {% if filters.sort == 'price_desc' %}selected{% endif %}>가격 높은 순</option></select></label>
+        <button class="min-h-11 rounded-md bg-zinc-950 px-4 py-2 text-sm font-black text-white" type="submit">필터 적용</button>
       </div>
-      <div class="mt-3">
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-xs font-bold text-zinc-800" href="{{ base_path }}">초기화</a>
+      <input type="hidden" name="category" value="{{ filters.category }}">
+      {% for key in ['status','asset_type','keyword','linked','usage','agency','closing_within_days','min_discount_rate','has_notice','has_detail','notice_id','pbanc_mng_no'] %}{% if filters[key] and filters[key] != 'ALL' %}<input type="hidden" name="{{ 'q' if key == 'keyword' else key }}" value="{{ filters[key] }}">{% endif %}{% endfor %}
+      <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold" aria-label="가격 빠른 선택">
+        {% for preset in price_presets %}<a class="rounded-full border border-zinc-300 bg-white px-3 py-2 text-zinc-800 hover:border-zinc-500" href="{{ preset.href }}">{{ preset.label }}</a>{% endfor %}
       </div>
-      <div class="mt-3 flex flex-wrap gap-2 text-xs font-bold">
-        {% for preset in price_presets %}
-          <a class="rounded-full border border-zinc-300 px-3 py-1.5 bg-white text-zinc-800" href="{{ preset.href }}">{{ preset.label }}</a>
-        {% endfor %}
-      </div>
-      {% include "shared/filter_chips.html" %}
-      {% include "shared/onbid_category_tabs.html" %}
-      {% if filters.data_quality == 'needs_confirmation' %}
-        <div class="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-          일부 정보가 충분하지 않아 원문 확인이 필요한 후보입니다. 가격, 일정, 위치, 면적, 원문 링크 등 주요 항목은 원문에서 직접 확인하세요.
-        </div>
-      {% endif %}
     </form>
+
+    {% if active_filter_chips %}
+      <div class="mb-3 flex flex-wrap items-center gap-2 text-xs font-bold" data-filter-chips="true">
+        {% for chip in active_filter_chips %}<a class="rounded-full bg-emerald-100 px-3 py-2 text-emerald-900" href="{{ chip.href }}" aria-label="{{ chip.label }} 필터 제거">{{ chip.label }} ×</a>{% endfor %}
+        <a class="rounded-full border border-zinc-300 bg-white px-3 py-2 text-zinc-800" href="{{ base_path }}" data-filter-clear>전체 초기화</a>
+      </div>
+    {% endif %}
+
+    {% if filters.data_quality == 'needs_confirmation' %}
+      <div class="mb-4 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-950">가격, 일정, 위치 또는 원문 경로 등 일부 자료를 원문에서 다시 확인해야 하는 후보입니다.</div>
+    {% endif %}
 
     {% if current_user and current_user.role == 'admin' %}
       <section class="mb-4 rounded-md border border-blue-200 bg-blue-50 p-4">
-        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p class="font-black text-blue-950">ONBID 관리</p>
-            <p class="mt-1 text-sm text-blue-800">관리자만 제한된 샘플 수집을 실행할 수 있습니다.</p>
-          </div>
-          <div class="flex flex-wrap gap-2">
-            <button class="onbid-sync-button rounded-md bg-blue-700 px-4 py-2 text-sm font-black text-white" data-api-kind="real_estate" data-include-details="true" type="button">부동산 수집</button>
-            <button class="onbid-sync-button rounded-md bg-emerald-700 px-4 py-2 text-sm font-black text-white" data-api-kind="movable" data-include-details="false" type="button">동산 수집</button>
-            <button class="onbid-sync-button rounded-md bg-teal-700 px-4 py-2 text-sm font-black text-white" data-api-kind="national_property" data-include-details="false" type="button">국유일반재산 수집</button>
-          </div>
-        </div>
+        <p class="font-black text-blue-950">ONBID 관리</p><p class="mt-1 text-sm text-blue-800">관리자에게만 제한된 동기화 제어를 표시합니다.</p>
       </section>
     {% endif %}
 
     <section class="overflow-hidden rounded-md border border-zinc-200 bg-white shadow-sm">
-      <div class="border-b border-zinc-200 p-4 text-sm font-bold text-zinc-600">총 {{ total_count }}건</div>
-      <div class="divide-y divide-zinc-100">
+      <div class="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-200 p-4 text-sm" aria-live="polite">
+        <p class="font-black">총 {{ total_count }}건 · {{ range_start }}–{{ range_end }}번째 표시</p>
+        <p class="text-zinc-600">{{ sort_labels.get(filters.sort, '마감 임박순') }}{% if last_data_updated %} · 마지막 업데이트 {{ last_data_updated[:16]|replace('T', ' ') }} KST{% endif %}</p>
+      </div>
+      <div class="divide-y divide-zinc-100" data-review-list="true">
         {% for item in items %}
           {% if item.public_visible %}
-            <article class="p-4 hover:bg-zinc-50">
-              <div class="grid gap-4 lg:grid-cols-[1fr_190px_160px]">
+            <article class="p-4 hover:bg-zinc-50" data-review-card="true" data-item-id="{{ item.id }}">
+              <div class="grid gap-4 lg:grid-cols-[1fr_210px_180px]">
                 <div>
                   <div class="flex flex-wrap items-center gap-1 text-xs font-bold">
                     <span class="rounded-full bg-zinc-950 px-2 py-1 text-white">{{ item.category_label }}</span>
-                    <span class="rounded-full bg-zinc-100 px-2 py-1 text-zinc-700">{{ item.status or '상태 확인 필요' }}</span>
+                    <span class="rounded-full bg-zinc-100 px-2 py-1 text-zinc-700">{{ item.status }}</span>
                     {% if item.d_day.state != 'unknown' %}<span class="rounded-full bg-blue-100 px-2 py-1 text-blue-800">{{ item.d_day.label }}</span>{% endif %}
-                    {% if item.info_badges.has_critical_missing %}<span class="rounded-full bg-amber-100 px-2 py-1 text-amber-800">자료 확인 필요</span>{% endif %}
+                    {% if item.info_badges.has_critical_missing %}<span class="rounded-full bg-amber-100 px-2 py-1 text-amber-900">자료 일부 확인 필요</span>{% endif %}
                   </div>
-                  <a class="mt-2 block font-black text-zinc-950 hover:text-emerald-700" href="{{ base_path }}/{{ item.id }}">{{ item.item_name or '물건명 확인 필요' }}</a>
-                  <p class="mt-1 text-sm text-zinc-600">{{ item.address or '소재지 확인 필요' }}</p>
-                  <p class="mt-1 font-mono text-xs text-zinc-500">{{ item.cltr_mng_no }}</p>
-                  <div class="mt-2 flex flex-wrap gap-1 text-xs font-bold">
-                    {% for badge in item.info_badges.missing[:3] %}
-                      <span class="rounded-full bg-amber-100 px-2 py-1 text-amber-800">{{ badge }}</span>
-                    {% endfor %}
-                    {% if item.notice_count %}<span class="rounded-full bg-emerald-100 px-2 py-1 text-emerald-800">공고 연결</span>{% endif %}
-                  </div>
+                  <h2 class="mt-2 font-black"><a class="hover:text-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-600" href="{{ base_path }}/{{ item.id }}">{{ item.item_name or '물건명 확인 필요' }}</a></h2>
+                  <p class="mt-1 text-sm text-zinc-600">{{ item.address or '소재지 확인 필요' }}{% if item.agency_name %} · {{ item.agency_name }}{% endif %}</p>
+                  <p class="mt-1 font-mono text-xs text-zinc-500">관리번호 {{ item.cltr_mng_no }}</p>
+                  {% if not item.external_url %}<p class="mt-2 text-xs font-bold text-amber-800">원문 경로는 상세에서 번호로 확인할 수 있습니다.</p>{% endif %}
                 </div>
-                <div class="text-sm">
-                  <p class="text-zinc-500">최저입찰가</p>
-                  <p class="mt-1 font-black">{{ "{:,}".format(item.minimum_bid_price) if item.minimum_bid_price else '확인 필요' }}</p>
-                  <p class="mt-3 text-zinc-500">감정가</p>
-                  <p class="mt-1 font-black">{{ "{:,}".format(item.appraisal_price) if item.appraisal_price else '확인 필요' }}</p>
-                </div>
-                <div class="flex flex-col gap-2 text-sm font-bold">
-                  <p class="text-zinc-600">마감 {{ item.bid_end_at or '일정 확인 필요' }}</p>
-                  {% if item.external_url %}
-                    <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-center text-zinc-800" href="/onbid/{{ item.id }}/original-link" target="_blank" rel="noopener noreferrer">원문 보기</a>
-                  {% else %}
-                    <span class="rounded-md border border-zinc-200 bg-zinc-50 px-3 py-2 text-center text-zinc-500">원문 링크 확인 필요</span>
-                  {% endif %}
+                <dl class="grid grid-cols-2 gap-3 text-sm lg:grid-cols-1">
+                  <div><dt class="text-zinc-500">최저입찰가</dt><dd class="mt-1 text-lg font-black">{{ "{:,}".format(item.minimum_bid_price) if item.minimum_bid_price else '확인 필요' }}</dd></div>
+                  <div><dt class="text-zinc-500">감정가</dt><dd class="mt-1 font-black">{{ "{:,}".format(item.appraisal_price) if item.appraisal_price else '확인 필요' }}</dd></div>
+                  <div class="col-span-2 lg:col-span-1"><dt class="text-zinc-500">마감</dt><dd class="mt-1 font-bold">{{ item.bid_end_at or '일정 확인 필요' }}</dd></div>
+                </dl>
+                <div class="flex flex-wrap content-start gap-2 text-sm font-bold lg:flex-col">
                   {% if current_user %}
-                    <form action="/onbid/{{ item.id }}/preference" method="post">
-                      <input type="hidden" name="action" value="favorite">
-                      <input type="hidden" name="enabled" value="true">
-                      <input type="hidden" name="next_url" value="{{ base_path }}">
-                      <button class="w-full rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-800" type="submit">관심</button>
+                    <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="favorite">
+                      <input type="hidden" name="action" value="favorite"><input type="hidden" name="enabled" value="{{ 'false' if item.preference.is_favorite else 'true' }}"><input type="hidden" name="next_url" value="{{ request.url.path }}?{{ request.url.query }}">
+                      <button class="min-h-11 w-full rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-emerald-900" type="submit">{{ '관심 해제' if item.preference.is_favorite else '관심' }}</button>
                     </form>
-                  {% else %}
-                    <a class="rounded-md border border-zinc-300 bg-white px-3 py-2 text-center text-zinc-800" href="/login?next={{ base_path }}">로그인 후 관심/패스</a>
+                    <form action="/onbid/{{ item.id }}/preference" method="post" data-preference-form="passed">
+                      <input type="hidden" name="action" value="passed"><input type="hidden" name="enabled" value="true"><input type="hidden" name="next_url" value="{{ request.url.path }}?{{ request.url.query }}">
+                      <button class="min-h-11 w-full rounded-md bg-zinc-800 px-3 py-2 text-white" type="submit">패스</button>
+                    </form>
                   {% endif %}
-                  <a class="rounded-md bg-zinc-950 px-3 py-2 text-center text-white" href="{{ base_path }}/{{ item.id }}">상세 보기</a>
+                  <a class="min-h-11 rounded-md bg-zinc-950 px-3 py-2.5 text-center text-white" href="{{ base_path }}/{{ item.id }}">상세 보기</a>
+                  {% if item.external_url %}<a class="min-h-11 rounded-md border border-zinc-300 bg-white px-3 py-2.5 text-center text-zinc-800" href="/onbid/{{ item.id }}/original-link" target="_blank" rel="noopener noreferrer">원문 보기</a>{% endif %}
                 </div>
               </div>
             </article>
           {% endif %}
         {% else %}
-          <div class="p-10 text-center text-zinc-500" data-empty-state="true">조회 결과가 없습니다. 조건을 바꿔 다시 검색해 주세요.</div>
+          <div class="p-10 text-center text-zinc-600" data-empty-state="true">
+            {% if filters.category == 'national_property' %}<p class="font-black">현재 공개 가능한 국유일반재산 항목이 없습니다.</p><p class="mt-2 text-sm">오래되거나 확인되지 않은 자료를 대신 노출하지 않습니다.</p>{% else %}조회 결과가 없습니다. 조건을 바꿔 다시 검색해 주세요.{% endif %}
+          </div>
         {% endfor %}
       </div>
     </section>
 
-    <nav class="mt-4 flex flex-wrap justify-center gap-2 text-sm font-bold" data-nav-scope="local-filter">
-      {% if pagination.has_prev %}
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="{{ pagination.prev_href }}">이전</a>
-      {% endif %}
-      {% for page_link in pagination.page_links %}
-        <a class="rounded-md px-3 py-2 {% if page_link.page == pagination.page %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white{% endif %}" href="{{ page_link.href }}">{{ page_link.page }}</a>
-      {% endfor %}
-      {% if pagination.has_next %}
-        <a class="rounded-md border border-zinc-300 bg-white px-3 py-2" href="{{ pagination.next_href }}">다음</a>
-      {% endif %}
-    </nav>
+    {% include "shared/pagination.html" %}
+    {% include "shared/toast.html" %}
     {% include "shared/ad_slot.html" %}
   </main>
-
-  <script>
-    document.querySelectorAll(".onbid-sync-button").forEach((syncButton) => {
-      syncButton.addEventListener("click", async () => {
-        const originalText = syncButton.textContent;
-        document.querySelectorAll(".onbid-sync-button").forEach((button) => button.disabled = true);
-        syncButton.textContent = "수집 요청 중";
-        try {
-          const response = await fetch(`/api/admin/auctions/onbid/sync?sample=true&limit=20&min_date=2025-01-01&api_kind=${syncButton.dataset.apiKind}&include_details=${syncButton.dataset.includeDetails}`, { method: "POST" });
-          if (!response.ok) throw new Error("sync failed");
-          location.reload();
-        } catch {
-          document.querySelectorAll(".onbid-sync-button").forEach((button) => button.disabled = false);
-          syncButton.textContent = originalText;
-          alert("ONBID 샘플 수집에 실패했습니다.");
-        }
-      });
-    });
-  </script>
+  {% include "shared/legal_footer_links.html" %}
+  <script src="/static/beta.js" defer></script>
 </body>
 </html>

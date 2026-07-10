@@ -3,7 +3,7 @@
 import json
 import re
 import hashlib
-from datetime import date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
 from urllib.parse import urlparse
@@ -1293,6 +1293,14 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         for link in item.notice_links
         if link.notice
     ]
+    created_at = item.created_at
+    if created_at and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    first_seen_at = created_at.astimezone(KST) if created_at else None
+    updated_at = item.updated_at
+    if updated_at and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    last_updated_at = updated_at.astimezone(KST) if updated_at else None
     return {
         "id": item.id,
         "source": item.source,
@@ -1334,6 +1342,9 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         "category": category,
         "category_label": get_onbid_category_label(category),
         "freshness_date": item.freshness_date or extract_onbid_freshness_date(item),
+        "first_seen_at": first_seen_at.isoformat() if first_seen_at else "",
+        "first_seen_date": first_seen_at.date().isoformat() if first_seen_at else "",
+        "last_updated_at": last_updated_at.isoformat() if last_updated_at else "",
         "freshness_status": item.freshness_status or evaluate_onbid_payload_freshness(item)["freshness_status"],
         "public_visible": is_onbid_item_public_visible(item),
         "info_badges": info_badges,

@@ -16,7 +16,7 @@ def main() -> int:
     response = TestClient(app).get("/")
     assert response.status_code == 200, response.status_code
     assert 'data-home-curation-cards="true"' in response.text
-    for phrase in ("오늘 새로 확인된 물건", "이번 주 마감 임박", "내 지역 신규 물건", "가격 정보 있는 1억 이하"):
+    for phrase in ("오늘 처음 수집된 물건", "이번 주 마감 임박", "서울·수도권 검토 가능", "가격 정보 있는 1억 이하"):
         assert phrase in response.text
     print(f"isolated_db={TEST_DB_PATH}")
     print("PASS - home curation cards")

@@ -1,5 +1,5 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-{% if review_mode %}
+{% if review_mode or settings.beta_noindex %}
   <meta name="robots" content="noindex,noarchive">
 {% endif %}

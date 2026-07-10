@@ -6,6 +6,6 @@
     ('notes', '메모', '/my/onbid/notes'),
     ('shared_summaries', '공유 요약', '/my/onbid/shared-summaries')
   ] %}
-    <a class="rounded-md px-3 py-2 {% if active_subsection == value %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white text-zinc-800{% endif %}" href="{{ href }}" {% if active_subsection == value %}aria-current="page"{% endif %}>{{ label }}</a>
+    <a class="inline-flex min-h-11 items-center rounded-md px-3 py-2 {% if active_subsection == value %}bg-zinc-950 text-white{% else %}border border-zinc-300 bg-white text-zinc-800{% endif %}" href="{{ href }}" {% if active_subsection == value %}aria-current="page"{% endif %}>{{ label }}{% if my_counts is defined %} {{ my_counts.get(value, 0) }}{% endif %}</a>
   {% endfor %}
 </nav>

@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     onbid_public_hide_unknown_date: bool = Field(default=True, alias="ONBID_PUBLIC_HIDE_UNKNOWN_DATE")
     onbid_public_max_future_days: int = Field(default=370, alias="ONBID_PUBLIC_MAX_FUTURE_DAYS")
     review_mode: bool = Field(default=False, alias="REVIEW_MODE")
+    beta_mode: bool = Field(default=True, alias="BETA_MODE")
+    beta_noindex: bool = Field(default=True, alias="BETA_NOINDEX")
+    product_name: str = Field(default="Court Auction Platform", alias="PRODUCT_NAME")
     local_dev_login_hint: bool = Field(default=False, alias="LOCAL_DEV_LOGIN_HINT")
     review_show_sample: bool = Field(default=False, alias="REVIEW_SHOW_SAMPLE")
 

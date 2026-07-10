@@ -1,0 +1,12 @@
+{
+  "name": "court-auction-platform-ui",
+  "private": true,
+  "scripts": {
+    "build:css": "tailwindcss -i ./frontend/static/tailwind.input.css -o ./frontend/static/app.css --minify",
+    "watch:css": "tailwindcss -i ./frontend/static/tailwind.input.css -o ./frontend/static/app.css --watch"
+  },
+  "devDependencies": {
+    "axe-core": "^4.12.1",
+    "tailwindcss": "3.4.17"
+  }
+}

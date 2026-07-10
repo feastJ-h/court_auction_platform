@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from datetime import date
 from math import ceil
-from urllib.parse import urlencode
+from urllib.parse import urlsplit
 from fastapi import Body, FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
@@ -33,6 +32,7 @@ from backend.services.product_engagement import (
     record_product_event,
     revoke_review_summary_share,
 )
+from backend.services.onbid_review import build_today_review_state
 from backend.services.user_auction_preferences import (
     get_preference,
     get_preference_map,
@@ -41,28 +41,23 @@ from backend.services.user_auction_preferences import (
     update_preference,
 )
 from backend.web.dependencies import LoginRedirect, RequireAdmin, RequireUser, admin_login_required
+from backend.web.pagination import build_pagination, build_query_href as build_query_href_shared
 from backend.workers.onbid_sync import run_onbid_sync
 
 
 def build_query_href(base_path: str, **params) -> str:
-    cleaned = {}
-    for key, value in params.items():
-        if value is None or value == "":
-            continue
-        if key == "category" and value == "all":
-            continue
-        cleaned[key] = value
-    query = urlencode(cleaned)
-    return f"{base_path}?{query}" if query else base_path
+    return build_query_href_shared(base_path, params)
 
 
-def build_price_presets(base_path: str, *, category: str, region: str) -> list[dict[str, str]]:
+def build_price_presets(base_path: str, filters: dict) -> list[dict[str, str]]:
+    state = dict(filters)
+    state.pop("page", None)
     return [
-        {"key": "all", "label": "가격 전체", "href": build_query_href(base_path, category=category, region=region)},
-        {"key": "under_100m", "label": "1억 이하", "href": build_query_href(base_path, price_max=100000000, category=category, region=region)},
-        {"key": "100m_300m", "label": "1억-3억", "href": build_query_href(base_path, price_min=100000000, price_max=300000000, category=category, region=region)},
-        {"key": "300m_500m", "label": "3억-5억", "href": build_query_href(base_path, price_min=300000000, price_max=500000000, category=category, region=region)},
-        {"key": "over_500m", "label": "5억 이상", "href": build_query_href(base_path, price_min=500000000, category=category, region=region)},
+        {"key": "all", "label": "가격 전체", "href": build_query_href_shared(base_path, state, omit={"price_min", "price_max"})},
+        {"key": "under_100m", "label": "1억 이하", "href": build_query_href_shared(base_path, state, omit={"price_min"}, price_max=100000000)},
+        {"key": "100m_300m", "label": "1억–3억", "href": build_query_href_shared(base_path, state, price_min=100000000, price_max=300000000)},
+        {"key": "300m_500m", "label": "3억–5억", "href": build_query_href_shared(base_path, state, price_min=300000000, price_max=500000000)},
+        {"key": "over_500m", "label": "5억 이상", "href": build_query_href_shared(base_path, state, omit={"price_max"}, price_min=500000000)},
     ]
 
 
@@ -74,21 +69,44 @@ def build_category_links(base_path: str, filters: dict, counts: dict[str, int]) 
         "national_property": "국유일반재산",
         "other": "기타",
     }
-    return [
+    links = [
         {
             "value": value,
             "label": label,
             "count": counts.get(value, 0),
-            "href": build_query_href(
-                base_path,
-                category=value,
-                region=filters.get("region"),
-                price_min=filters.get("price_min"),
-                price_max=filters.get("price_max"),
-                data_quality=filters.get("data_quality"),
-            ),
+            "href": build_query_href_shared(base_path, filters, omit={"page", "category"}, category=value),
         }
         for value, label in labels.items()
+    ]
+    return [link for link in links if link["value"] != "other" or int(link["count"]) > 0]
+
+
+def safe_local_path(value: str, fallback: str) -> str:
+    parsed = urlsplit(value or "")
+    if parsed.scheme or parsed.netloc or not parsed.path.startswith("/") or parsed.path.startswith("//"):
+        return fallback
+    return value
+
+
+def build_active_filter_chips(base_path: str, filters: dict) -> list[dict[str, str]]:
+    definitions = [
+        ("region", f"지역 {filters.get('region')}" if filters.get("region") else ""),
+        ("price_min", f"최소 {int(filters['price_min']):,}원" if filters.get("price_min") else ""),
+        ("price_max", f"최대 {int(filters['price_max']):,}원" if filters.get("price_max") else ""),
+        ("data_quality", "자료 확인 필요" if filters.get("data_quality") == "needs_confirmation" else ""),
+        ("closing_within_days", f"{filters.get('closing_within_days')}일 이내 마감" if filters.get("closing_within_days") else ""),
+        ("keyword", f"검색 {filters.get('keyword')}" if filters.get("keyword") else ""),
+        ("agency", f"기관 {filters.get('agency')}" if filters.get("agency") else ""),
+        ("usage", f"용도 {filters.get('usage')}" if filters.get("usage") else ""),
+    ]
+    return [
+        {
+            "key": key,
+            "label": label,
+            "href": build_query_href_shared(base_path, filters, omit={"page", key}),
+        }
+        for key, label in definitions
+        if label
     ]
 
 
@@ -137,28 +155,6 @@ def register_auction_routes(
         if session_cookie:
             return session_cookie[:128]
         return request.cookies.get("session") or ""
-
-    def _is_today_review_item(view: dict) -> bool:
-        return view.get("freshness_date") == date.today().isoformat()
-
-    def _today_review_state(item_views: list[dict]) -> dict:
-        today_items = [view for view in item_views if _is_today_review_item(view)]
-        if not today_items:
-            today_items = item_views[:20]
-        passed = [view for view in today_items if view.get("preference", {}).get("is_passed")]
-        favorited = [view for view in today_items if view.get("preference", {}).get("is_favorite")]
-        remaining = [
-            view
-            for view in today_items
-            if not view.get("preference", {}).get("is_passed") and not view.get("preference", {}).get("is_favorite")
-        ]
-        return {
-            "items": remaining,
-            "total": len(today_items),
-            "passed": len(passed),
-            "favorited": len(favorited),
-            "complete": bool(today_items) and not remaining,
-        }
 
     def _render_auction_list(
         request: Request,
@@ -264,7 +260,39 @@ def register_auction_routes(
                 "pbanc_mng_no": pbanc_mng_no,
                 "sort": sort,
             }
-            category_counts = get_onbid_category_counts(session, public_only=public_only)
+            count_kwargs = {
+                "status": status,
+                "asset_type": asset_type,
+                "keyword": keyword,
+                "linked": linked,
+                "region": region,
+                "usage": usage,
+                "agency": agency,
+                "price_min": _read_int(price_min),
+                "price_max": _read_int(price_max),
+                "closing_within_days": _read_int(closing_within_days, maximum=365),
+                "min_discount_rate": _read_float(min_discount_rate, maximum=100),
+                "has_notice": has_notice,
+                "has_detail": has_detail,
+                "data_quality": data_quality,
+                "public_only": public_only,
+                "notice_id": _read_int(notice_id, minimum=1),
+                "pbanc_mng_no": pbanc_mng_no,
+            }
+            category_counts = {
+                candidate: count_auction_items(session, category=candidate, **count_kwargs)
+                for candidate in ("all", "real_estate", "movable", "national_property", "other")
+            }
+            query_state = dict(filters)
+            query_state["q"] = query_state.pop("keyword", "")
+            pagination = build_pagination(
+                base_path,
+                current_page=current_page,
+                total_pages=total_pages,
+                query_state=query_state,
+            )
+            range_start = ((current_page - 1) * per_page + 1) if total_count else 0
+            range_end = min(current_page * per_page, total_count)
             return templates.TemplateResponse(
                 request,
                 "auctions/index.html",
@@ -282,25 +310,19 @@ def register_auction_routes(
                     "filters": filters,
                     "category_counts": category_counts,
                     "category_links": build_category_links(base_path, filters, category_counts),
-                    "price_presets": build_price_presets(base_path, category=category, region=filters["region"]),
-                "pagination": {
-                        "page": current_page,
-                        "pages": list(range(1, total_pages + 1)),
-                        "has_prev": current_page > 1,
-                        "has_next": current_page < total_pages,
-                        "prev_page": max(1, current_page - 1),
-                        "next_page": min(total_pages, current_page + 1),
-                        "prev_href": build_query_href(base_path, page=max(1, current_page - 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"], data_quality=filters["data_quality"]),
-                        "next_href": build_query_href(base_path, page=min(total_pages, current_page + 1), region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"], data_quality=filters["data_quality"]),
-                        "page_links": [
-                            {
-                                "page": p,
-                                "href": build_query_href(base_path, page=p, region=filters["region"], category=category, price_min=filters["price_min"], price_max=filters["price_max"], data_quality=filters["data_quality"]),
-                            }
-                            for p in range(1, total_pages + 1)
-                        ],
-                    },
+                    "price_presets": build_price_presets(base_path, filters),
+                    "active_filter_chips": build_active_filter_chips(base_path, filters),
+                    "pagination": pagination,
                     "total_count": total_count,
+                    "range_start": range_start,
+                    "range_end": range_end,
+                    "last_data_updated": max((view.get("last_updated_at", "") for view in item_views), default=""),
+                    "sort_labels": {
+                        "closing_soon": "마감 임박순",
+                        "newest": "최근 수집순",
+                        "price_asc": "가격 낮은 순",
+                        "price_desc": "가격 높은 순",
+                    },
                 },
             )
 
@@ -420,7 +442,7 @@ def register_auction_routes(
             )
             for view in item_views:
                 view["preference"] = serialize_preference(preferences.get(view["id"]))
-            today_review = _today_review_state(item_views)
+            today_review = build_today_review_state(item_views)
             record_product_event(
                 session,
                 "view_today_queue",
@@ -431,7 +453,7 @@ def register_auction_routes(
             if today_review["complete"]:
                 record_product_event(
                     session,
-                    "complete_today_review",
+                    "today_queue_complete",
                     user_id=current_user.id if current_user else None,
                     session_id=_analytics_session_id(request),
                     metadata={"total": today_review["total"], "passed": today_review["passed"], "favorited": today_review["favorited"]},
@@ -450,6 +472,7 @@ def register_auction_routes(
                     "review_mode": get_settings().review_mode,
                     "items": today_review["items"],
                     "today_review": today_review,
+                    "last_data_updated": max((view.get("last_updated_at", "") for view in item_views), default=""),
                     "base_path": "/onbid",
                 },
             )
@@ -508,7 +531,7 @@ def register_auction_routes(
             )
 
     def _redirect_after_preference(next_url: str, auction_item_id: int) -> RedirectResponse:
-        target = next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}"
+        target = safe_local_path(next_url, f"/onbid/{auction_item_id}")
         return RedirectResponse(url=target, status_code=303)
 
     def _save_preference(
@@ -527,7 +550,7 @@ def register_auction_routes(
                 raise HTTPException(status_code=403, detail="Review mode disables mutations.")
             current_user = require_user(request, session)
             if current_user is None:
-                return login_redirect(next_url if next_url.startswith("/") else f"/onbid/{auction_item_id}")
+                return login_redirect(safe_local_path(next_url, f"/onbid/{auction_item_id}"))
             item = get_auction_item(session, auction_item_id)
             if item is None:
                 raise HTTPException(status_code=404, detail="Auction item not found.")
@@ -556,7 +579,7 @@ def register_auction_routes(
             elif passed is True:
                 event_name = "pass_item"
             elif passed is False:
-                event_name = "undo_pass_item"
+                event_name = "undo_pass"
             elif watching is True:
                 event_name = "watch_item"
             elif note is not None:
@@ -625,7 +648,7 @@ def register_auction_routes(
             elif payload.get("passed") is True:
                 event_name = "pass_item"
             elif payload.get("passed") is False:
-                event_name = "undo_pass_item"
+                event_name = "undo_pass"
             elif payload.get("watching") is True:
                 event_name = "watch_item"
             elif "note" in payload:
@@ -665,6 +688,37 @@ def register_auction_routes(
                 category=view["category"],
             )
             return RedirectResponse(url=view["external_url"], status_code=303)
+
+    @app.post("/api/product-events")
+    def record_product_event_api(request: Request, payload: dict = Body(...)) -> dict:
+        event_name = str(payload.get("event_name") or "")
+        allowed_frontend_events = {
+            "category_tab_click",
+            "filter_open",
+            "filter_apply",
+            "filter_clear",
+            "sort_change",
+            "pagination_click",
+            "view_item_detail",
+            "view_original_fallback",
+            "copy_onbid_number",
+            "view_my_review",
+        }
+        if event_name not in allowed_frontend_events:
+            raise HTTPException(status_code=422, detail="Unsupported product event.")
+        allowed_metadata = {key: payload.get(key) for key in ("page", "sort", "state") if key in payload}
+        with session_scope() as session:
+            current_user = require_user(request, session)
+            record_product_event(
+                session,
+                event_name,
+                auction_item_id=_read_int(payload.get("item_id"), minimum=1),
+                user_id=current_user.id if current_user else None,
+                session_id=_analytics_session_id(request),
+                category=str(payload.get("category") or "")[:64],
+                metadata=allowed_metadata,
+            )
+        return {"status": "recorded"}
 
     @app.post("/onbid/{auction_item_id}/issue-report")
     def submit_onbid_issue_report(
@@ -879,6 +933,11 @@ def register_auction_routes(
             views = [serialize_auction_item(item) for item in items]
             for view in views:
                 view["preference"] = serialize_preference(preferences.get(view["id"]))
+            my_counts = {
+                value: len(list_preference_items(session, current_user.id, value))
+                for value in ("favorites", "watching", "notes", "passed")
+            }
+            my_counts["shared_summaries"] = len(list_review_summary_shares(session, user_id=current_user.id))
             return templates.TemplateResponse(
                 request,
                 "auctions/my_list.html",
@@ -895,6 +954,7 @@ def register_auction_routes(
                     "preference_type": preference_type,
                     "title": title,
                     "description": description,
+                    "my_counts": my_counts,
                 },
             )
 

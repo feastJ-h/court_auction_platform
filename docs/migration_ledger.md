@@ -196,6 +196,18 @@ user_id + auction_item_id
 .\backup_database.ps1
 ```
 
+## v011 beta launch hardening (2026-07-10)
+
+비파괴 additive migration만 적용한다.
+
+- `users`: `account_status`, `must_change_password`, 정책 동의 버전 3종, `accepted_at`, `last_login_at`, `failed_login_count`, `locked_until`, `beta_expires_at`, `created_by_admin_id` 추가.
+- `security_revoked_sessions`: keyed session hash와 expiry. raw session/token은 저장하지 않음.
+- `security_rate_limits`: scope, keyed subject hash, fixed window count/expiry. raw IP는 저장하지 않음.
+- `onbid_sync_runs`: 실행 ID/API 종류/시각/상태와 집계 수치, 정제된 오류만 저장.
+- expiry/status 조회 index를 `IF NOT EXISTS`로 추가.
+
+`ensure_schema_migrations`는 column 존재 여부와 `CREATE TABLE/INDEX IF NOT EXISTS`를 사용하므로 재실행 가능하다. 기존 column/table/data 삭제는 없다. 이전 코드는 새 필드를 무시할 수 있으나 SQLite column 제거 rollback은 지원하지 않아 필요 시 사전 전체 DB 백업으로 복원한다.
+
 ### 검증
 
 v003에서 다음 검증을 수행했다.

@@ -4,58 +4,39 @@ Updated: 2026-07-10
 
 ## Current Branch
 
-Branch: `codex/devpack-v010-beta-release-candidate-ux`
+Branch: `codex/devpack-v011-beta-launch-hardening`
 
-Latest work: devpack v010 Beta RC UX — top-level ONBID category navigation, compact shared pagination, query-state preservation, pass/5-second undo, truthful today queue, home diversity, beta mode UI, local CSS, security hardening, expanded pytest/Playwright/axe QA.
+Latest work: devpack v011 Beta Launch Hardening — ONBID category navigation recovery, rendered/result contract tests, beta fail-closed config, CSRF/POST logout, persistent security state, invite account lifecycle, health/process/tunnel gates, sync history, backup restore, CI and operations runbooks.
 
 ## Current Product State
 
-- ONBID category tabs are directly below the page title and are the only category selection control.
-- Desktop pagination is windowed; mobile uses previous/current-total/next; ONBID and cases share one component.
-- Logged-in users can favorite, pass, undo, restore from the passed list, and save notes.
-- Today queue uses KST first-seen date and never silently presents recent items as today items.
-- Home counts match their queries; preview prioritizes two real-estate and two movable items with notice diversity.
-- Beta banner replaces public technical review copy; internal review details remain admin-only.
-- Tailwind CDN was replaced with a 28 KB compiled local stylesheet.
-- Official ONBID homepage + identifier-copy fallback is used; no unverified detail URL is generated.
-
-## Data State
-
-```text
-public_visible_fresh_non_sample 1076
-active_or_upcoming 1015
-real_estate 516
-movable 560
-national_property 0
-duplicate_groups 0
-sample_public 0
-stale_or_unknown_public 0
-public_status_conflicts 0
-last_updated 2026-07-10 07:46 KST
-```
-
-Pre-v010 backup:
-
-```text
-storage/backups/auction_data_20260710_110441.db
-sha256 D0FD97632C840086AD6D983CD69AD8390531CBD09D091DC5F2C870DA03D3731B
-```
+- `/onbid` category tabs now produce distinct canonical URLs and strictly isolated results.
+- Public fresh data: total 1,076 / real estate 516 / movable 560 / national property 0; duplicates/sample/stale-or-unknown exposure 0.
+- Beta/production reject default secrets, default admin password, test DB and local login hint.
+- Admin accounts are one-time bootstrapped; beta users must change their temporary password and accept versioned policies.
+- Signed double-submit CSRF protects HTML/JSON mutations; logout is POST-only; revoke/rate-limit state persists in SQLite with optional Redis adapter.
+- live/ready/version endpoints, structured request IDs, single-worker start/stop/status, quick/named tunnel runbook and external E2E are available.
+- Official ONBID URLs are never guessed. Stored official URLs are used; otherwise identifier-copy + official-home fallback remains.
 
 ## Verification
 
-- Default pytest: 58 passed, 2 visual deselected
-- Playwright visual/login E2E: 2 passed
-- Legacy core scripts: 4 passed in beta runner; 13 additional security/product scripts passed
-- axe-core critical/serious: 0
-- Body overflow: 0 at 360, 390, 768, 1024, 1440 widths
-- `run_beta_qa.ps1 -Visual`: PASS
-- Cloudflare quick tunnel: public routes 200, unauthenticated admin 303, noindex/noarchive present
-- Sensitive staged files: 0
+```text
+default pytest 80 passed
+Playwright visual/login E2E 2 passed
+axe critical/serious 0
+body overflow 0 at 360/390/768/1024/1440
+legacy core scripts 4 passed
+external quick-tunnel E2E PASS
+backup restore integrity/count/startup PASS
+pip-audit 0 known vulnerabilities
+npm critical/high 0 (17 moderate in Lighthouse QA dependency tree)
+Lighthouse performance 1.00 / accessibility 1.00 / best-practices 0.96 / SEO 0.54 (beta noindex)
+```
 
 ## Release Assessment
 
-`조건부 베타 오픈 가능`
+Invite-only supervised beta: `GO`.
 
-Conditions: stable named staging URL, beta account/operations policy, single-instance rate-limit/session-revoke constraint or shared store, and monitoring. Direct ONBID item links and national-property fresh data remain unresolved; safe fallbacks are active.
+Stable public beta hostname: `NO-GO` until existing Cloudflare account/domain credentials are provided and named-tunnel external gates are rerun. Quick tunnel is verified but not an uptime commitment.
 
-Full detail: `reports/devpacks/devpack_v010_beta_release_candidate_result_bundle.md`
+Full detail: `reports/devpacks/devpack_v011_beta_launch_hardening_result_bundle.md`

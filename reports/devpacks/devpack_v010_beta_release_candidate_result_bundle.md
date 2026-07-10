@@ -316,13 +316,13 @@ DB schema 변경이 없어 `docs/migration_ledger.md`는 변경하지 않았다.
 
 ## 31. 종료 Git 상태
 
-- 구현 커밋 생성 후 결과 bundle과 `project-result_current.md`만 추가 작성
-- 최종 sensitive staged-file scan, `git diff --check`, log/status는 문서 커밋 직전에 다시 확인
+- 구현과 문서 커밋 완료 후 clean worktree 확인
+- 최종 sensitive staged-file scan과 `git diff --check` PASS
 - storage QA/DB/log는 ignored 상태 유지
 
 ## 32. Commit/push 결과
 
 - 구현 commit: `cbf0323 feat: complete v010 beta release candidate ux`
-- 문서 commit: 이 bundle과 current status를 포함하는 후속 docs commit
-- Push: 최종 검증 후 `origin/codex/devpack-v010-beta-release-candidate-ux`로 수행
+- 문서 commit: `21a17a1 docs: add v010 beta rc result bundle`
+- Push: `origin/codex/devpack-v010-beta-release-candidate-ux` 생성 및 upstream 설정 성공
 - `main` merge/push: 수행하지 않음

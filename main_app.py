@@ -399,32 +399,32 @@ def root(request: Request):
         home_cards = [
             {
                 "title": "오늘 새로 확인된 물건",
-                "count": count_auction_items(session, public_only=True),
+                "count": count_auction_items(session, public_only=True, active_only=True),
                 "description": "최근 수집 기준으로 공개 가능한 온비드 항목입니다.",
                 "href": "/onbid/today",
             },
             {
                 "title": "이번 주 마감 임박",
-                "count": count_auction_items(session, public_only=True, closing_within_days=7),
-                "description": "마감일이 가까운 항목을 먼저 확인합니다.",
+                "count": count_auction_items(session, public_only=True, active_only=True, closing_within_days=7),
+                "description": "진행 중이거나 예정된 항목 중 7일 이내 마감입니다.",
                 "href": "/onbid?closing_within_days=7",
             },
             {
                 "title": "내 지역 신규 물건",
-                "count": count_auction_items(session, public_only=True, region="서울"),
+                "count": count_auction_items(session, public_only=True, active_only=True, region="서울"),
                 "description": "비로그인 기본값은 서울/수도권 중심으로 안내합니다.",
                 "href": "/onbid?region=%EC%84%9C%EC%9A%B8",
             },
             {
                 "title": "가격 정보 있는 1억 이하",
-                "count": count_auction_items(session, public_only=True, price_max=100000000),
+                "count": count_auction_items(session, public_only=True, active_only=True, price_max=100000000),
                 "description": "가격이 낮은 순으로 원문 확인 대상을 좁힙니다.",
                 "href": "/onbid?price_max=100000000",
             },
         ]
         preview_items = [
             serialize_auction_item(item)
-            for item in list_auction_items(session, public_only=True, sort="newest", limit=4)
+            for item in list_auction_items(session, public_only=True, active_only=True, sort="newest", limit=4)
         ]
         return templates.TemplateResponse(
             request,

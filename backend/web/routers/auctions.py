@@ -407,6 +407,7 @@ def register_auction_routes(
             items = list_auction_items(
                 session,
                 public_only=True,
+                active_only=True,
                 sort="newest",
                 limit=200,
                 offset=0,

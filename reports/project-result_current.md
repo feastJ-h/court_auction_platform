@@ -4,47 +4,45 @@ Updated: 2026-07-10
 
 ## Current Branch
 
-Branch: `codex/devpack-v008-master-review-data-ux-loop`
+Branch: `codex/devpack-v009-onbid-data-source-status-quality`
 
-Latest work: devpack v008 master loop - public ONBID UX recovery, home curation, today review stabilization, detail 4-Zone layout, shared summary management, admin issue queue, product analytics summary, limited ONBID data refresh, and external tunnel QA.
+Latest work: devpack v009 - ONBID data-volume refresh, KST deadline-state repair, source-document fallback, detail consistency, admin data-quality operations view, default pytest policy, and external tunnel QA.
 
-## v008 Completed Capabilities
+## v009 Completed Capabilities
 
-- Home now shows four curation cards and recent public ONBID items.
-- `/onbid` uses clearer Korean copy, active/upcoming priority, source-document checks, original-link prominence, data-quality guidance, and login CTA for personal actions.
-- `/onbid/today` returns 200 for anonymous and logged-in users and keeps review completion summary.
-- `/onbid/{id}` is organized into 4 zones: source status, objective facts, source checkpoints, and personal actions.
-- Development Insight CTA is visible only for real_estate details and hidden for movable details.
-- `/my/onbid/shared-summaries` lets users view and revoke public-safe share links.
-- `/admin/onbid-issue-reports` lets admins review ONBID data issue reports.
-- `/admin/product-analytics` summarizes sanitized product events without raw payload, full URL, or private memo exposure.
-- Public mojibake and banned-copy scans pass on local and Cloudflare QA routes.
+- KST-aware deadline state prevents past dates from displaying as `D+N` or active.
+- `/onbid/today` and seven-day closing filters include active/upcoming rows only.
+- Details without an official URL show non-action direct-confirmation fields instead of a fake source link.
+- Detail checklists use independent confirmed/needs-confirmation states; false detail availability is zero.
+- `/admin/onbid-data-quality` reports public freshness, category counts, original URL/detail coverage, missing fields, source API counts, and status conflicts.
+- Default `python -m pytest` is isolated from external/environment-dependent tests.
 
 ## Data State
 
-Backup before DB work:
+Backup before v009 DB work:
 
 ```text
-C:\Users\xogns\Documents\testAuction\court_auction_platform\storage\backups\auction_data_20260710_065322.db
-sha256: DE754FACDE6C183D3703F580D8A0E326C6E4AE84CE0A44AE33284F6DACF82BEF
+C:\Users\xogns\Documents\testAuction\court_auction_platform\storage\backups\auction_data_20260710_072156.db
+sha256: E75EE570831C33D9F0559A146AD5D899484F1C02B4E12E7F955F36D649533F75
 ```
 
-Limited ONBID refresh:
+v009 real ONBID refresh:
 
 ```text
-real_estate: fetched 20, accepted 20, inserted 18, duplicates 2
-movable: fetched 20, accepted 20, inserted 20, duplicates 0
-national_property: fetched 20, accepted 0, dropped stale/unknown 20
+real_estate: fetched 500, accepted 500, inserted 438, duplicates 62
+movable: fetched 500, accepted 500, inserted 500, duplicates 0
+notice: 20 fetched, all stale under public freshness policy
+national_property: 50 fetched, 0 accepted (41 stale, 9 unknown-date)
 ```
 
 Current public-visible fresh non-sample:
 
 ```text
-total 138
-real_estate 78
-movable 60
+total 1076
+real_estate 516
+movable 560
 national_property 0
-active_or_upcoming 78
+active_or_upcoming 1016
 duplicate_key_count 0
 ```
 
@@ -74,21 +72,20 @@ development_insight_cta_safety_test
 all 11 v008 new tests
 ```
 
-`python -m pytest` was installed and attempted. It collected old pytest-style tests and failed on environment-dependent or pre-existing assertions: default analyzer provider mismatch, blocked court-site Playwright access, OCR-required PDF with empty extraction, and orchestrator network access.
+All core, v007/v008, and v009 script-style tests passed. `python -m pytest` passes with 2 default product tests; integration and external tests are now explicitly excluded from the default collection.
 
 ## External QA
 
 Cloudflare quick tunnel used:
 
 ```text
-https://lamp-walnut-auckland-connected.trycloudflare.com
+https://directed-install-mainland-chapter.trycloudflare.com
 ```
 
-Routes `/`, `/onbid`, `/onbid/today`, ONBID category/data-quality filters, `/cases`, and `/disclaimer` returned 200 with mojibake=False and banned=False. Detail QA confirmed real_estate CTA visible and movable CTA hidden.
+Routes `/`, `/onbid`, `/onbid/today`, ONBID category/data-quality filters, `/cases`, and `/disclaimer` returned 200. Detail QA confirmed no D+ label, original-link fallback for no-URL items, real_estate CTA visible, and movable CTA hidden.
 
 ## Remaining Risks
 
-- Data volume still below v008 goals.
+- Direct original URLs are still unavailable from the tested ONBID payloads; the detail fallback is active.
 - national_property needs a better fresh-date/API parameter strategy.
-- Operating DB items currently have little or no public original detail URL linkage.
-- Full pytest collection needs a separate cleanup pass because it includes real-network and legacy environment assumptions.
+- 17 raw source-status values conflict with past deadlines; public display is corrected and the admin dashboard exposes the queue.

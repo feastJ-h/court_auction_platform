@@ -26,10 +26,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not $Sample) {
-    if ($Limit -gt 20) { throw "Real ONBID sync is limited to Limit=20 in v005." }
-    if ($MaxPages -gt 1) { throw "Real ONBID sync is limited to MaxPages=1 in v005." }
-    if ($MinDate -ne "2025-01-01") { throw "Real ONBID sync requires MinDate=2025-01-01 in v005." }
-    if ($DetailLimit -gt 1) { throw "Real ONBID sync is limited to DetailLimit=1 in v006-a2." }
+    if ($Limit -gt 50) { throw "Real ONBID sync is limited to Limit=50 in v009." }
+    if ($MaxPages -gt 10) { throw "Real ONBID sync is limited to MaxPages=10 in v009." }
+    if ($MinDate -ne "2025-01-01") { throw "Real ONBID sync requires MinDate=2025-01-01." }
+    if ($DetailLimit -gt 20) { throw "Real ONBID detail enrichment is limited to 20 items per run in v009." }
 }
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path

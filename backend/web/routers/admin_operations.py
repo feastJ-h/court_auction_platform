@@ -24,7 +24,7 @@ from backend.services.collection_quality import build_collection_quality_summary
 from backend.services.crawl_runs import build_crawl_run_summary
 from backend.services.local_analysis_status import build_local_analysis_status
 from backend.services.metadata_corrections import ALLOWED_PARSE_STATUSES
-from backend.services.onbid_observability import build_onbid_observability_summary
+from backend.services.onbid_observability import build_onbid_data_quality_summary, build_onbid_observability_summary
 from backend.services.product_engagement import (
     build_product_analytics_summary,
     list_data_issue_reports,
@@ -367,6 +367,28 @@ def register_admin_operation_routes(
             update_data_issue_report_status(session, report_id=report_id, status=status)
         return RedirectResponse(url="/admin/onbid-issue-reports", status_code=303)
 
+    @app.get("/admin/onbid-data-quality")
+    def admin_onbid_data_quality_page(request: Request):
+        with session_scope() as session:
+            current_user = require_admin(request, session)
+            if current_user is None:
+                return login_redirect("/admin/onbid-data-quality")
+            return templates.TemplateResponse(
+                request,
+                "admin/onbid_data_quality.html",
+                {
+                    "current_user": current_user,
+                    "settings": get_settings(),
+                    "active_section": "admin",
+                    "active_subsection": "onbid_data_quality",
+                    "active_category": "",
+                    "page_title": "ONBID data quality",
+                    "breadcrumbs": [{"label": "Admin", "href": "/admin"}, {"label": "ONBID data quality", "href": "/admin/onbid-data-quality"}],
+                    "review_mode": get_settings().review_mode,
+                    "summary": build_onbid_data_quality_summary(session),
+                },
+            )
+
     @app.get("/admin/product-analytics")
     def admin_product_analytics_page(request: Request, days: int = Query(7, ge=1, le=90)):
         with session_scope() as session:
@@ -402,3 +424,10 @@ def register_admin_operation_routes(
             if require_admin(request, session) is None:
                 raise admin_login_required()
             return build_onbid_observability_summary(session, days=days)
+
+    @app.get("/api/admin/onbid-data-quality")
+    def read_onbid_data_quality(request: Request) -> dict:
+        with session_scope() as session:
+            if require_admin(request, session) is None:
+                raise admin_login_required()
+            return build_onbid_data_quality_summary(session)

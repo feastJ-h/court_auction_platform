@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from _v007_helpers import configure_test_env, seed_items
 
-TEST_DB_PATH = configure_test_env("onbid_detail_four_zone_test")
+TEST_DB_PATH = configure_test_env("onbid_detail_checklist_readability_test")
 
 from fastapi.testclient import TestClient  # noqa: E402
 
@@ -14,12 +14,11 @@ def main() -> int:
     init_db()
     item_id, _ = seed_items()
     page = TestClient(app).get(f"/onbid/{item_id}")
-    assert page.status_code == 200, page.status_code
-    for zone in ("source-status", "objective-facts", "source-checkpoints", "personal-actions"):
-        assert f'data-detail-zone="{zone}"' in page.text
-    assert "최종 판단 전에는 원문과 관계 서류를 직접 확인" in page.text
+    assert page.status_code == 200
+    for label in ("가격 정보: 확인됨", "소재지: 확인됨", "입찰 일정: 확인됨", "원문 링크: 확인됨"):
+        assert label in page.text
     print(f"isolated_db={TEST_DB_PATH}")
-    print("PASS - detail four zone")
+    print("PASS - detail checklist readability")
     return 0
 
 

@@ -3,9 +3,11 @@
 import json
 import re
 import hashlib
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Any
+from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, joinedload
@@ -48,6 +50,7 @@ ONBID_CATEGORY_LABELS = {
     "other": "기타",
 }
 ONBID_MIN_PUBLIC_DATE = "2025-01-01"
+KST = ZoneInfo("Asia/Seoul")
 FRESHNESS_FRESH = "fresh"
 FRESHNESS_STALE = "stale"
 FRESHNESS_UNKNOWN = "unknown_date"
@@ -187,6 +190,54 @@ def parse_onbid_date(value: Any) -> date | None:
         return None
 
 
+def now_kst() -> datetime:
+    return datetime.now(tz=KST)
+
+
+def parse_onbid_deadline(value: Any) -> datetime | None:
+    """Parse an ONBID deadline in KST, treating a date-only value as end of day."""
+    text = str(value or "").strip()
+    parsed_date = parse_onbid_date(text)
+    if parsed_date is None or is_implausible_onbid_public_date(parsed_date):
+        return None
+    normalized = text.replace("T", " ")
+    for pattern in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y%m%d%H%M%S", "%Y%m%d%H%M"):
+        try:
+            return datetime.strptime(normalized, pattern).replace(tzinfo=KST)
+        except ValueError:
+            continue
+    return datetime.combine(parsed_date, time(23, 59, 59), tzinfo=KST)
+
+
+def get_onbid_deadline_status(value: Any, *, now: datetime | None = None) -> dict[str, Any]:
+    deadline = parse_onbid_deadline(value)
+    if deadline is None:
+        return {"label": "일정 확인 필요", "state": "unknown", "days": None, "is_active": False, "deadline": None}
+    reference = now or now_kst()
+    if reference.tzinfo is None:
+        reference = reference.replace(tzinfo=KST)
+    else:
+        reference = reference.astimezone(KST)
+    delta_seconds = (deadline - reference).total_seconds()
+    if delta_seconds < 0:
+        days_after = max(1, (reference.date() - deadline.date()).days)
+        return {
+            "label": "입찰마감" if days_after == 1 else f"마감 후 {days_after}일",
+            "state": "closed",
+            "days": -days_after,
+            "is_active": False,
+            "deadline": deadline,
+        }
+    days = (deadline.date() - reference.date()).days
+    if days == 0:
+        label, state = "오늘 마감", "urgent"
+    elif days <= 7:
+        label, state = ("마감 임박" if days == 1 else f"D-{days}"), "urgent"
+    else:
+        label, state = f"D-{days}", "normal"
+    return {"label": label, "state": state, "days": days, "is_active": True, "deadline": deadline}
+
+
 def max_public_onbid_date() -> date:
     days = max(0, int(get_settings().onbid_public_max_future_days or 0))
     return date.today() + timedelta(days=days)
@@ -321,17 +372,18 @@ def build_onbid_info_badges(item: AuctionItem) -> dict[str, Any]:
     has_location = bool((item.address or "").strip())
     has_schedule = bool((item.bid_end_at or "").strip())
     has_notice = bool(item.notice_links or item.pbanc_mng_no)
-    has_detail = bool(item.item_description or item.attachment_summary or item.cautions)
-    has_source_url = any(link.notice and link.notice.detail_url for link in item.notice_links)
+    detail_values = (item.item_description, item.attachment_summary, item.cautions, item.bid_condition, item.contract_condition)
+    has_detail = sum(bool(str(value or "").strip()) for value in detail_values) >= 1
+    has_source_url = bool(get_onbid_external_url(item))
     available: list[str] = []
     missing: list[str] = []
     checks = [
-        (has_price, "가격 정보 있음", "가격 정보 확인 필요"),
-        (has_location, "소재지 있음", "소재지 확인 필요"),
-        (has_schedule, "입찰 일정 있음", "입찰 일정 확인 필요"),
-        (has_notice, "공고 연결", "공고 연결 확인 필요"),
-        (has_detail, "상세 정보 있음", "상세 정보 수집 필요"),
-        (has_source_url, "원문 링크 있음", "원문 링크 확인 필요"),
+        (has_price, "가격 정보: 확인됨", "가격 정보: 확인 필요"),
+        (has_location, "소재지: 확인됨", "소재지: 확인 필요"),
+        (has_schedule, "입찰 일정: 확인됨", "입찰 일정: 확인 필요"),
+        (has_notice, "공고 연결: 확인됨", "공고 연결: 확인 필요"),
+        (has_detail, "상세 설명: 확인됨", "상세 설명: 확인 필요"),
+        (has_source_url, "원문 링크: 확인됨", "원문 링크: 확인 필요"),
     ]
     for ok, available_label, missing_label in checks:
         (available if ok else missing).append(available_label if ok else missing_label)
@@ -465,18 +517,8 @@ def calculate_liquidation_score(item: AuctionItem) -> tuple[int, list[str]]:
     return max(0, min(100, score)), reasons
 
 
-def calculate_d_day(value: str) -> dict[str, Any]:
-    if not value:
-        return {"label": "일정 확인 필요", "state": "unknown", "days": None}
-    parsed = parse_onbid_date(value)
-    if parsed is None or is_implausible_onbid_public_date(parsed):
-        return {"label": "일정 확인 필요", "state": "unknown", "days": None}
-    delta = (parsed - date.today()).days
-    if delta == 0:
-        return {"label": "D-Day", "state": "urgent", "days": 0}
-    if delta < 0:
-        return {"label": f"D+{abs(delta)}", "state": "closed", "days": delta}
-    return {"label": f"D-{delta}", "state": "urgent" if delta <= 7 else "normal", "days": delta}
+def calculate_d_day(value: str, *, now: datetime | None = None) -> dict[str, Any]:
+    return get_onbid_deadline_status(value, now=now)
 
 
 def normalize_auction_payload(payload: dict[str, Any]) -> dict[str, Any]:
@@ -737,6 +779,7 @@ def list_auction_items(
     data_quality: str = "ALL",
     category: str = "all",
     public_only: bool = False,
+    active_only: bool = False,
     notice_id: int | None = None,
     pbanc_mng_no: str = "",
     sort: str = "closing_soon",
@@ -769,7 +812,7 @@ def list_auction_items(
     if closing_within_days is not None:
         today = date.today()
         end_date = today + timedelta(days=closing_within_days)
-        statement = statement.where(AuctionItem.bid_end_at >= today.isoformat(), AuctionItem.bid_end_at <= end_date.isoformat())
+        statement = statement.where(AuctionItem.bid_end_at >= today.isoformat(), AuctionItem.bid_end_at <= f"{end_date.isoformat()}T23:59:59")
     if linked == "linked":
         statement = statement.where(AuctionItem.case_links.any())
     if linked == "unlinked":
@@ -800,11 +843,16 @@ def list_auction_items(
     }
     active_first = case((AuctionItem.bid_end_at >= date.today().isoformat(), 0), else_=1)
     ordering = orderings.get(sort, (active_first.asc(), AuctionItem.bid_end_at.asc(), AuctionItem.id.desc()))
-    return list(
-        session.scalars(
-            statement.order_by(*ordering).limit(limit).offset(offset)
-        ).unique()
-    )
+    items = list(session.scalars(statement.order_by(*ordering)).unique())
+    if active_only or closing_within_days is not None or sort == "closing_soon":
+        statuses = {item.id: get_onbid_deadline_status(item.bid_end_at) for item in items}
+        if active_only:
+            items = [item for item in items if statuses[item.id]["is_active"]]
+        if closing_within_days is not None:
+            items = [item for item in items if statuses[item.id]["is_active"] and statuses[item.id]["days"] <= closing_within_days]
+        if sort == "closing_soon":
+            items.sort(key=lambda item: (0 if statuses[item.id]["is_active"] else 1, statuses[item.id]["days"] if statuses[item.id]["is_active"] else 10**6, item.id * -1))
+    return items[offset : offset + limit]
 
 
 def count_auction_items(
@@ -826,6 +874,7 @@ def count_auction_items(
     data_quality: str = "ALL",
     category: str = "all",
     public_only: bool = False,
+    active_only: bool = False,
     notice_id: int | None = None,
     pbanc_mng_no: str = "",
 ) -> int:
@@ -852,7 +901,7 @@ def count_auction_items(
     if closing_within_days is not None:
         today = date.today()
         end_date = today + timedelta(days=closing_within_days)
-        statement = statement.where(AuctionItem.bid_end_at >= today.isoformat(), AuctionItem.bid_end_at <= end_date.isoformat())
+        statement = statement.where(AuctionItem.bid_end_at >= today.isoformat(), AuctionItem.bid_end_at <= f"{end_date.isoformat()}T23:59:59")
     if linked == "linked":
         statement = statement.where(AuctionItem.case_links.any())
     if linked == "unlinked":
@@ -874,6 +923,14 @@ def count_auction_items(
     if min_discount_rate is not None:
         discount_expr = (1 - (AuctionItem.minimum_bid_price * 1.0 / func.nullif(AuctionItem.appraisal_price, 0))) * 100
         statement = statement.where(AuctionItem.appraisal_price > 0, discount_expr >= min_discount_rate)
+    if active_only or closing_within_days is not None:
+        items = list(session.scalars(statement.with_only_columns(AuctionItem)))
+        return sum(
+            1
+            for item in items
+            if get_onbid_deadline_status(item.bid_end_at)["is_active"]
+            and (closing_within_days is None or get_onbid_deadline_status(item.bid_end_at)["days"] <= closing_within_days)
+        )
     return session.scalar(statement) or 0
 
 
@@ -1210,6 +1267,16 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
     score, reasons = calculate_liquidation_score(item)
     category = derive_onbid_category(item)
     info_badges = build_onbid_info_badges(item)
+    deadline_status = calculate_d_day(item.bid_end_at)
+    raw_status = (item.status or "").strip()
+    if deadline_status["state"] == "closed":
+        display_status = "입찰마감"
+    elif deadline_status["state"] == "unknown":
+        display_status = "일정 확인 필요"
+    elif "종료" in raw_status or "마감" in raw_status:
+        display_status = "종료됨"
+    else:
+        display_status = raw_status or "입찰진행중"
     notices = [
         {
             "id": link.notice.id,
@@ -1246,7 +1313,8 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         "bid_start_at": item.bid_start_at,
         "bid_end_at": item.bid_end_at,
         "open_bid_at": item.open_bid_at,
-        "status": item.status,
+        "status": display_status,
+        "source_status": raw_status,
         "agency_name": item.agency_name,
         "photo_url": item.photo_url,
         "attachment_summary": item.attachment_summary,
@@ -1269,12 +1337,38 @@ def serialize_auction_item(item: AuctionItem) -> dict[str, Any]:
         "freshness_status": item.freshness_status or evaluate_onbid_payload_freshness(item)["freshness_status"],
         "public_visible": is_onbid_item_public_visible(item),
         "info_badges": info_badges,
-        "d_day": calculate_d_day(item.bid_end_at),
+        "d_day": deadline_status,
         "link_count": len(item.case_links),
         "notice_count": len(notices),
         "notices": notices,
-        "has_detail": bool(item.item_description or item.attachment_summary or item.cautions),
+        "has_detail": bool(item.item_description or item.attachment_summary or item.cautions or item.bid_condition or item.contract_condition),
         "supports_development_insight": supports_development_insight(item),
-        "external_url": notices[0]["detail_url"] if notices and notices[0]["detail_url"] else "",
+        "external_url": get_onbid_external_url(item),
+        "original_search_fields": {
+            "onbid_cltr_no": item.onbid_cltr_no,
+            "pbct_no": item.pbct_no or item.pbct_cdtn_no,
+            "agency_name": item.agency_name,
+            "item_name": item.item_name,
+            "bid_end_at": item.bid_end_at,
+        },
     }
+
+
+def get_onbid_external_url(item: AuctionItem) -> str:
+    candidates: list[str] = []
+    for link in item.notice_links:
+        if link.notice and link.notice.detail_url:
+            candidates.append(link.notice.detail_url)
+    try:
+        payload = json.loads(item.raw_payload or "{}")
+    except (TypeError, json.JSONDecodeError):
+        payload = {}
+    for source in (payload, payload.get("_raw_list", {}), payload.get("_raw_detail", {})):
+        if isinstance(source, dict):
+            candidates.extend(str(source.get(key) or "") for key in ("detailUrl", "dtlUrl", "pbancUrl", "sourceUrl", "originalUrl"))
+    for candidate in candidates:
+        parsed = urlparse(candidate.strip())
+        if parsed.scheme in {"http", "https"} and parsed.netloc and not any(token in parsed.query.lower() for token in ("servicekey=", "api_key=", "apikey=", "token=")):
+            return candidate.strip()
+    return ""
 

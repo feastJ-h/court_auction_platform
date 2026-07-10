@@ -7,7 +7,15 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import AuctionItem, AuctionNotice, AuctionNoticeItemLink, CrawlRun
-from backend.services.auction_items import audit_onbid_freshness, build_onbid_info_badges, derive_onbid_category, get_onbid_category_counts
+from backend.services.auction_items import (
+    audit_onbid_freshness,
+    build_onbid_info_badges,
+    derive_onbid_category,
+    get_onbid_category_counts,
+    get_onbid_deadline_status,
+    get_onbid_external_url,
+    is_onbid_item_public_visible,
+)
 
 
 def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dict[str, Any]:
@@ -84,6 +92,79 @@ def build_onbid_observability_summary(session: Session, *, days: int = 7) -> dic
         "freshness": freshness_summary,
         "missing": missing_summary,
     }
+
+
+def build_onbid_data_quality_summary(session: Session) -> dict[str, Any]:
+    """Operational metrics for the admin-only ONBID data quality view."""
+    items = list(session.scalars(select(AuctionItem).where(AuctionItem.source == "ONBID")))
+    public_items = [item for item in items if is_onbid_item_public_visible(item)]
+    active_items = [item for item in public_items if get_onbid_deadline_status(item.bid_end_at)["is_active"]]
+    ended_items = [item for item in public_items if get_onbid_deadline_status(item.bid_end_at)["state"] == "closed"]
+    source_counts: dict[str, int] = {}
+    category_counts = {"real_estate": 0, "movable": 0, "national_property": 0, "other": 0}
+    missing_original: list[dict[str, Any]] = []
+    missing_detail: list[dict[str, Any]] = []
+    active_status_conflicts: list[dict[str, Any]] = []
+    with_original = 0
+    detail_body = 0
+    false_detail_available = 0
+    for item in public_items:
+        category = derive_onbid_category(item)
+        category_counts[category] = category_counts.get(category, 0) + 1
+        try:
+            import json
+            raw = json.loads(item.raw_payload or "{}")
+        except (TypeError, ValueError):
+            raw = {}
+        source_api = str(raw.get("_source_api") or raw.get("sourceApi") or "unknown")
+        source_counts[source_api] = source_counts.get(source_api, 0) + 1
+        url = get_onbid_external_url(item)
+        badges = build_onbid_info_badges(item)
+        has_detail = "상세 설명: 확인됨" in badges["available"]
+        if url:
+            with_original += 1
+        else:
+            missing_original.append(_quality_item_view(item))
+        if has_detail:
+            detail_body += 1
+        else:
+            missing_detail.append(_quality_item_view(item))
+        marker_only = "_raw_detail" in raw and not has_detail
+        if marker_only:
+            false_detail_available += 1
+        deadline = get_onbid_deadline_status(item.bid_end_at)
+        if deadline["state"] == "closed" and "진행" in (item.status or ""):
+            active_status_conflicts.append(_quality_item_view(item))
+    latest_runs = list(session.scalars(select(CrawlRun).where(CrawlRun.run_type.like("onbid_%")).order_by(CrawlRun.started_at.desc()).limit(50)))
+    last_sync = next((run for run in latest_runs if run.status == "SUCCEEDED"), None)
+    last_detail = next((run for run in latest_runs if "detail" in (run.run_type or "").lower() and run.status == "SUCCEEDED"), None)
+    total_public = len(public_items)
+    total_active = len(active_items)
+    return {
+        "public_visible_fresh_non_sample": total_public,
+        "active_or_upcoming": total_active,
+        "ended": len(ended_items),
+        "category_counts": category_counts,
+        "original_url_coverage": percentage(with_original, total_public),
+        "active_original_url_coverage": percentage(sum(1 for item in active_items if get_onbid_external_url(item)), total_active),
+        "detail_body_coverage": percentage(detail_body, total_public),
+        "source_api_counts": source_counts,
+        "missing_original_url_count": len(missing_original),
+        "missing_price_count": sum(1 for item in public_items if not (item.minimum_bid_price or item.appraisal_price)),
+        "missing_address_count": sum(1 for item in public_items if not (item.address or "").strip()),
+        "missing_deadline_count": sum(1 for item in public_items if get_onbid_deadline_status(item.bid_end_at)["state"] == "unknown"),
+        "false_detail_available_count": false_detail_available,
+        "national_property_note": "Fresh public national-property rows depend on the source API date fields; no inference is used when the source does not provide a valid schedule.",
+        "last_sync_at": last_sync.finished_at.isoformat() if last_sync and last_sync.finished_at else "",
+        "last_detail_enrichment_at": last_detail.finished_at.isoformat() if last_detail and last_detail.finished_at else "",
+        "missing_original_items": missing_original[:50],
+        "missing_detail_items": missing_detail[:50],
+        "ended_active_conflicts": active_status_conflicts[:50],
+    }
+
+
+def _quality_item_view(item: AuctionItem) -> dict[str, Any]:
+    return {"id": item.id, "item_name": item.item_name, "category": derive_onbid_category(item), "bid_end_at": item.bid_end_at}
 
 
 def get_onbid_deadline_distribution(session: Session) -> dict[str, int]:

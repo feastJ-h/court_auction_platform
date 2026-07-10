@@ -138,6 +138,6 @@ Validate an official ONBID search/detail URL pattern with a small approved sampl
 ## 16. Completion Git State
 
 - Final status: clean worktree after commit.
-- Final commit: `a2b1ae8 feat: improve onbid data source status quality v009`
+- Feature commit: `fe5d25e feat: improve onbid data source status quality v009`
 - Push: `origin/codex/devpack-v009-onbid-data-source-status-quality` created and set as upstream.
 - Sensitive staged-file scan: no matches for environment files, databases, storage/logs, runtime settings, or invalid git metadata.
